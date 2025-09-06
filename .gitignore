@@ -13,3 +13,6 @@ wheels/
 
 #env file 
 .env
+
+
+Credentials.json

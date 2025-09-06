@@ -24,4 +24,3 @@ def loading_env_variables(variable : str)->str :
         return values
     except Exception as e :
         print(f"failed to load the variables from the env file please check the console : {e}")
-

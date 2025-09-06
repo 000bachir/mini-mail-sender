@@ -5,7 +5,7 @@
 from supabase import  create_client , Client
 from supabase import Client
 import datetime
-from app.config import loading_env_variables
+from config import loading_env_variables
 
 
 #! env var keys
