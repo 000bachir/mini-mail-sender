@@ -9,5 +9,6 @@ check_credentials :
 database : 
 	python -m app.supabase.supabaseClient
 
-
+time : 
+	python -m app.scheduler 
 
