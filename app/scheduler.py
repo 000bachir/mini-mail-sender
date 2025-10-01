@@ -16,51 +16,49 @@ the purpose of this file is to create a scheduler
 from re import error
 import time, sched
 from time import gmtime, strftime
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import threading
 
 
-def retreiving_the_current_time():
+def retreaving_the_current_time():
     try:
         current_time = datetime.now()
-        current_time_formated = current_time.strftime("%H:%M:%S")
-        time_zone_location = current_time.astimezone().tzinfo
-        localtime = time.localtime()
-        if current_time == "" and time_zone_location == "":
-            raise error(
-                "error couldn't retreive the current time nor the exact time zone"
-            )
+        if not current_time:
+            print("error could not retreive the current time please check again")
+            return False
         else:
-            print(
-                f"the current time is : {current_time.strftime('%H:%M:%S')} and the timezone is {time_zone_location}"
-            )
-            if localtime.tm_hour < 12:
-                print(f"and it's {current_time_formated} am in the morning")
-            else:
-                if localtime.tm_hour > 12:
-                    print(f"and it's {current_time_formated} pm in the evening")
+            return current_time
+
     except Exception as e:
-        print(
-            f"ERROR could not retreive time infos please check the console for errors : {e}"
-        )
+        raise error(f"could not proccede with the retreival operation : {e}")
 
 
-def target_time_for_operation():
-    timenow = retreiving_the_current_time()
-    print("this the current time", timenow)
-
-    timer = threading.Timer(10)
-    timer.start()
+def retreiving_the_local_time_zone() -> datetime:
     try:
-        user_input = input(
-            "please enter the amount of time you want the program to run : "
-        )
-        added_time = retreiving_the_current_time() + timedelta(hours=10)
-        print(
-            f"you entered {user_input} and based on the current time {timenow} the program will end his task at "
-        )
+        local_tz = datetime.now().astimezone().tzinfo
+        now = datetime.now()
+        local_now = now.astimezone()
+        local_tz = local_now.tzinfo
+        if local_tz is None:
+            raise RuntimeError(
+                "error could not retreive the local time zone please check again"
+            )
+        return local_tz
     except Exception as e:
-        print("error", e)
+        raise error(f"error : {e}")
 
 
-target_time_for_operation()
+def time_manipulation() -> None:
+    timenow = retreaving_the_current_time()
+    local_time_zone = retreiving_the_local_time_zone()
+    print(
+        "this comes from a function above : ",
+        timenow.strftime("%H:%M:%S"),
+        local_time_zone,
+    )
+    added_time = timenow + timedelta(hours=10)
+    new_time = added_time.strftime("%H:%M:%S")
+    print("the added time becomes like this : ", new_time)
+
+
+time_manipulation()
