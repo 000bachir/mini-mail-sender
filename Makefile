@@ -1,10 +1,10 @@
-server :
-	flask --app app.src.index run --debug
-
+server : 
+	fastapi dev main.py
+email : 
+	python -m app.sender
 
 check_credentials : 
 	python -m app.utils.Check_email_credential
-
 
 database : 
 	python -m app.supabase.supabaseClient
