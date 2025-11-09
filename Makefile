@@ -1,3 +1,5 @@
+env : 
+	. .venv/bin/activate
 server : 
 	fastapi dev main.py
 email : 
