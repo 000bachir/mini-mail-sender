@@ -14,3 +14,5 @@ database :
 time : 
 	python -m app.scheduler 
 
+test :
+	python -m app.test

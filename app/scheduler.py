@@ -1,125 +1,176 @@
-from re import error
-from time import strftime
-from datetime import datetime, timedelta
-import random
+import re
 import time
-
-"""
-to handle the schedule of sending email like splitting the 24h into chuncks
-"""
-
-"""
-the purpose of this file is to create a scheduler
-    this scheduler will act on a certain window of time and these laps of time some opereation will be executed
-    what do i need to do first : 
-        1- keep track of the exact time and the time zone ==== done 
-        2- define the time to perfom operations ==== done
-        3- create a function that will add time randomly ==== done
-        4- manipulate the time where the program has to stop ==== done
-"""
-
-# python representation of the 24h accepted :
-# the_hour_of_the_day = "23:59:59.999999"
-# to add time i need to use timedelta() only works on returned object of datetime
+import random
+from datetime import datetime, timedelta
+from typing import Optional, Callable
+from typing import List, Optional, Callable, Tuple
+from datetime import datetime, timedelta, time as dt_time
+from enum import Enum
 
 
-def retrieve_current_time():
-    try:
-        current_time = datetime.now()
-        return current_time
-    except Exception as e:
-        raise error(f"could not proccede with the retreival operation : {e}")
+class PriorityState(Enum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
 
 
-def retrieve_local_timezone():
-    try:
-        local_tz = datetime.now().astimezone().tzinfo
-        now = datetime.now()
-        local_now = now.astimezone()
-        local_tz = local_now.tzname()
-        if local_tz is None:
-            raise RuntimeError(
-                "error could not retreive the local time zone please check again"
-            )
-        return local_tz
-    except Exception as e:
-        raise RuntimeError(
-            f"error could not retreive the current local time zone : {e}"
-        )
+class EmailScheduler:
+    """
+    A scheduler that mimics human-like timing patterns for sending emails.
+    Helps avoid detection by automated spam filters through randomized delays.
+    """
 
-
-def add_time_randomly() -> timedelta:
-    interval_of_times = {
-        "morning": [
+    def __init__(self):
+        self.morning_intervals = [
             timedelta(hours=2, minutes=0, seconds=20),
             timedelta(hours=1, minutes=20),
             timedelta(hours=1, minutes=40),
             timedelta(hours=1),
-        ],
-        "evening": [
+        ]
+        self.evening_intervals = [
             timedelta(hours=1, minutes=0, seconds=35),
             timedelta(hours=1, minutes=15),
             timedelta(minutes=33),
             timedelta(minutes=47, seconds=56),
-        ],
-    }
-    try:
-        now = retrieve_current_time()
-        random_time_morning = random.choice(interval_of_times["morning"])
-        random_time_evening = random.choice(interval_of_times["evening"])
-        if now.hour < 12:
-            return random_time_morning
-        elif now.hour > 12:
-            return random_time_evening
-        elif now.hour == 12:
-            return timedelta(days=0, hours=1, minutes=0, seconds=0)
-    except Exception as e:
-        raise RuntimeError(
-            f"error happened during the random adding of an arbitrary time of action : {e}"
-        )
+        ]
+        self.noon_interval = timedelta(hours=1)
 
+        # buisness hours set up
+        self.buisness_hours_starting: dt_time = dt_time(9, 0)
+        self.buisness_hours_ending: dt_time = dt_time(17, 0)
+        self.rate_limit_email_per_hour: int = 15
+        self.rate_limit_email_per_day: int = 50
 
-def time_manipulation() -> None:
-    # retreived the current time plus the timezone
-    try:
-        timenow = retrieve_current_time()
-        if timenow is None:
-            raise RuntimeError("error could not retreive the current time")
-        local_time_zone = retrieve_local_timezone()
-        print(
-            "retreiving the current time with the time zone : ",
-            timenow.strftime("%H:%M:%S %p"),
-            local_time_zone,
-        )  # this comes from the function above
-        random_choice = add_time_randomly()
-        print(f"randomly adding {random_choice}")
-        cumulated_time = timenow + random_choice  # the time to stop the program
-        formated_cumulated_time = cumulated_time.strftime("%H:%M:%S %p")
-        print("the cumulated time becomes : ", cumulated_time.strftime("%H:%M:%S %p"))
-        print(
-            f"please keep in mind the program will stop executing once the : {formated_cumulated_time} is reached"
-        )
-        increment_time_value_in_second = timedelta(
-            days=0, hours=0, minutes=0, seconds=1
-        )
-        increment_time_value_in_seconds = timedelta(
-            days=0, hours=0, minutes=0, seconds=10
-        )
+        # rate limit of sending emails
+        self.max_email_an_hour = 15
+        self.max_email_a_day = 50
 
-        while timenow < cumulated_time:
-            time.sleep(1)
-            if random_choice > timedelta(days=0, hours=1, minutes=0, seconds=0):
-                timenow += increment_time_value_in_seconds
+    def get_current_time(self) -> datetime:
+        """Retrieve the current system time."""
+        try:
+            return datetime.now()
+        except Exception as e:
+            raise RuntimeError(f"Could not retrieve current time: {e}")
+
+    def get_local_timezone(self) -> str:
+        """Retrieve the local timezone name."""
+        try:
+            local_now = datetime.now().astimezone()
+            local_tz = local_now.tzname()
+
+            if local_tz is None:
+                raise RuntimeError("Could not retrieve local timezone")
+
+            return local_tz
+        except Exception as e:
+            raise RuntimeError(f"Could not retrieve local timezone: {e}")
+
+    # check if it is buisness hour
+    def is_buisness_hours(self, check_time: Optional[datetime] = None) -> bool:
+        # check if a time has been given
+        if check_time is None:
+            check_time = self.get_current_time()
+        # check if it is the week end
+        if check_time.weekday() >= 5:
+            print(
+                "avoid using the program during week ends to avoid being flagged by google bots"
+            )
+            return False
+        current_time = check_time.time()
+        # this will check if the time of action is between 9 and 17 normal hour rate of working
+        if (
+            self.buisness_hours_starting <= current_time
+            and current_time <= self.buisness_hours_ending
+        ):
+            print("the window of action is acceptable by the program")
+            return True
+        else:
+            return False
+
+    def get_random_delay(self) -> timedelta:
+        """
+        Get a random delay based on current time of day.
+        in a more dumb way this will select the time of action
+        for exemple if the time added is one hour so that mean that emails
+        are be sent inside of that timelaps
+        """
+        try:
+            now = self.get_current_time()
+            hour = now.hour
+
+            if hour < 12:
+                return random.choice(self.morning_intervals)
+            elif hour == 12:
+                return self.noon_interval
             else:
-                timenow += increment_time_value_in_second
-            print(timenow.strftime("%H:%M:%S"))
-            if timenow == cumulated_time:
-                print("the program has reached it end")
-                break
-    except Exception as e:
-        raise RuntimeError(
-            f"error while procceding with the time manipulation and : {e}"
-        )
+                return random.choice(self.evening_intervals)
+        except Exception as e:
+            raise RuntimeError(f"Error calculating random delay: {e}")
+
+    def schedule_next_run(self, callback: Optional[Callable] = None) -> datetime:
+        """
+        Schedule the next email send with human-like randomization.
+
+        Args:
+            callback: Optional function to call when the scheduled time is reached
+
+        Returns:
+            The datetime when the next action will occur
+        """
+        try:
+            current_time = self.get_current_time()
+            timezone = self.get_local_timezone()
+            delay = self.get_random_delay()
+            scheduled_time = current_time + delay
+
+            print(f"Current time: {current_time.strftime('%H:%M:%S %p')} {timezone}")
+            print(f"Random delay: {delay}")
+            print(f"Scheduled send time: {scheduled_time.strftime('%H:%M:%S %p')}")
+            print(f"Waiting until {scheduled_time.strftime('%H:%M:%S %p')}...")
+
+            # Wait until scheduled time
+            while datetime.now() < scheduled_time:
+                time.sleep(1)
+
+            print(f"Scheduled time reached at {datetime.now().strftime('%H:%M:%S %p')}")
+
+            # Execute callback if provided
+            if callback:
+                callback()
+
+            return scheduled_time
+
+        except Exception as e:
+            raise RuntimeError(f"Error during scheduling: {e}")
+
+    def wait_random_interval(
+        self, min_seconds: int = 30, max_seconds: int = 180
+    ) -> None:
+        """
+        Waiting for a random interval between min and max seconds after each email is sent
+        useful for adding variability
+        """
+        wait_time = random.randint(min_seconds, max_seconds)
+        print(f"Waiting {wait_time} seconds before next action...")
+        time.sleep(wait_time)
 
 
-time_manipulation()
+# Example usage
+if __name__ == "__main__":
+    scheduler = EmailScheduler()
+
+    # Define what to do when scheduled time is reached
+    def send_email():
+        print("📧 Sending email now!")
+        # Your email sending logic goes here
+
+    # Schedule a single email
+    scheduler.schedule_next_run(callback=send_email)
+
+    # Or schedule multiple emails with random intervals
+    # for i in range(3):
+    #     print(f"\n--- Email {i+1} ---")
+    #     scheduler.schedule_next_run(callback=send_email)
+    #     if i < 2:  # Don't wait after the last email
+    #         scheduler.wait_random_interval(min_seconds=60, max_seconds=300)
