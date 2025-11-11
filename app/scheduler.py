@@ -6,7 +6,7 @@ from typing import Optional, Callable
 from typing import List, Optional, Callable, Tuple
 from datetime import datetime, timedelta, time as dt_time
 from enum import Enum
-
+import logging
 
 class PriorityState(Enum):
     LOW = "low"
@@ -23,10 +23,10 @@ class EmailScheduler:
 
     def __init__(self):
         self.morning_intervals = [
-            timedelta(hours=2, minutes=0, seconds=20),
-            timedelta(hours=1, minutes=20),
-            timedelta(hours=1, minutes=40),
-            timedelta(hours=1),
+            timedelta(hours=1, minutes=10, seconds=20),
+            timedelta(hours=1, minutes=20, seconds=45),
+            timedelta(hours=1, minutes=30, seconds=35),
+            timedelta(hours=1, minutes=0, seconds=59),
         ]
         self.evening_intervals = [
             timedelta(hours=1, minutes=0, seconds=35),
@@ -43,8 +43,20 @@ class EmailScheduler:
         self.rate_limit_email_per_day: int = 50
 
         # rate limit of sending emails
-        self.max_email_an_hour = 15
-        self.max_email_a_day = 50
+        max_email_an_hour = 15
+        max_email_a_day = 50
+        # enable loggins 
+        enable_loggin_info : bool = True
+        # tracking metricks 
+        self.email_sent_during_an_hour = 0 
+        self.email_sent_during_a_day = 0 
+        self.current_hour_start = datetime.now().replace(hour=0 , minute=0 , second=0 , microsecond=0)
+        self.current_day_start =  datetime.now().replace(hour=0 , minute=0 , second=0 , microsecond=0)
+
+        if enable_loggin_info : 
+            logging.basicConfig(level=logging.INFO format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
+
 
     def get_current_time(self) -> datetime:
         """Retrieve the current system time."""
@@ -88,12 +100,12 @@ class EmailScheduler:
         else:
             return False
 
-    def get_random_delay(self) -> timedelta:
+def get_random_delay_to_start_sending(self) -> timedelta:
         """
         Get a random delay based on current time of day.
         in a more dumb way this will select the time of action
-        for exemple if the time added is one hour so that mean that emails
-        are be sent inside of that timelaps
+        to be clear let say you start the program at 9 in the morning
+        the program will add a random value of time before starting to send emails
         """
         try:
             now = self.get_current_time()
@@ -111,17 +123,15 @@ class EmailScheduler:
     def schedule_next_run(self, callback: Optional[Callable] = None) -> datetime:
         """
         Schedule the next email send with human-like randomization.
-
         Args:
             callback: Optional function to call when the scheduled time is reached
-
         Returns:
             The datetime when the next action will occur
         """
         try:
             current_time = self.get_current_time()
             timezone = self.get_local_timezone()
-            delay = self.get_random_delay()
+            delay = self.get_random_delay_to_start_sending()
             scheduled_time = current_time + delay
 
             print(f"Current time: {current_time.strftime('%H:%M:%S %p')} {timezone}")
@@ -144,9 +154,7 @@ class EmailScheduler:
         except Exception as e:
             raise RuntimeError(f"Error during scheduling: {e}")
 
-    def wait_random_interval(
-        self, min_seconds: int = 30, max_seconds: int = 180
-    ) -> None:
+    def wait_random_interval(self, min_seconds: int = 30, max_seconds: int = 180) -> None:
         """
         Waiting for a random interval between min and max seconds after each email is sent
         useful for adding variability
@@ -154,12 +162,19 @@ class EmailScheduler:
         wait_time = random.randint(min_seconds, max_seconds)
         print(f"Waiting {wait_time} seconds before next action...")
         time.sleep(wait_time)
+        
+    def reset_daily_email_counter(self) -> None : 
+        now = self.get_current_time()
+        current_day = now.replace(hour=0 , minute=0 , second=0 , microsecond=0)
+        if current_day > self.current_day_start : 
+            self.email_sent_during_a_day = 0
+            self.current_day_start = current_day
+            
 
 
 # Example usage
 if __name__ == "__main__":
     scheduler = EmailScheduler()
-
     # Define what to do when scheduled time is reached
     def send_email():
         print("📧 Sending email now!")
