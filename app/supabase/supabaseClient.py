@@ -8,6 +8,7 @@ from realtime import dataclass
 from supabase import Client, create_client
 from config import loading_env_variables
 from typing import Union
+import logging
 
 """
     what do i need to do to make the script works just like i intend to : 
@@ -29,6 +30,9 @@ supabase_client: Client = create_client(url, key)
 # timestamp = datetime.datetime.now(datetime.UTC).isoformat()
 seeding_time = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
+# logging global variabele
+is_loggin: bool = True
+
 
 @dataclass
 class EmailRecord:
@@ -46,6 +50,13 @@ class EmailRecord:
 class DatabaseOperation:
     def __init__(self):
         self.client = supabase_client
+
+    # logging setup
+    if is_loggin:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
 
     """
         checking the health of the database
@@ -83,7 +94,7 @@ class DatabaseOperation:
             )
             if response_check.data:
                 latest = response_check.data[0]
-                print(f"status: {latest['status']} at {latest['timestamp']}")
+                logging.info(f"status: {latest['status']} at {latest['timestamp']}")
                 return True
             return False
         except Exception as e:
@@ -96,9 +107,9 @@ class DatabaseOperation:
     def valid_email_pattern(self, email: str):
         pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if re.fullmatch(pattern, email):
-            print("the email provided is valid")
+            logging.info("the email provided is valid")
         else:
-            print("the email provided doesn't have a valid structure")
+            logging.warning("the email provided doesn't have a valid structure")
 
     def checking_for_dupalicates(self, record: EmailRecord):
         try:
@@ -145,11 +156,11 @@ class DatabaseOperation:
         self.valid_record_needed(record)  # check if the required fields are available
         duplicates = self.checking_for_dupalicates(record)
         if duplicates:
-            print(f"email already in the database {record.email}")
+            logging.info(f"email already in the database {record.email}")
             return False
         # time of seeding :
         try:
-            print("the process of seeding the database is being initiated")
+            logging.warning("the process of seeding the database is being initiated")
             # normalizing timestamp
             if isinstance(record.added_at, str):
                 record.added_at = datetime.datetime.now().isoformat()
@@ -175,7 +186,7 @@ class DatabaseOperation:
                 .execute()
             )
             if seeding and seeding.data is not None:
-                print("the seeding of the database has been successful")
+                logging.info("the seeding of the database has been successful")
 
         except Exception as e:
             raise RuntimeError(
@@ -189,7 +200,7 @@ class DatabaseOperation:
     def countRows(self):
         try:
             rows = self.client.table("emails").select("*", count="exact").execute()
-            print(f"the number of rows in the database are : {rows.count}")
+            logging.info(f"the number of rows in the database are : {rows.count}")
             if rows.count == 0:
                 print("the database has no rows inside of it")
         except Exception as e:
@@ -205,7 +216,7 @@ class DatabaseOperation:
         try:
             fetch = self.client.table("emails").select("email").execute()
             if fetch and fetch.data is None:
-                print("failed to fetch all of the email from the database")
+                logging.error("failed to fetch all of the email from the database")
             else:
                 print(f"email fetched : {fetch.data}")
         except Exception as e:

@@ -22,5 +22,21 @@ def cheking_buisness_hours():
         print("outside of working scope")
 
 
-today = date.today()
-print(today)
+print("helll ")
+
+
+def check_time():
+    check_time = datetime.now()
+    print(check_time)
+    if check_time.weekday() >= 5:
+        print("the weekdays have been hits no more email to be sent")
+    current_time = check_time.time()
+    print(current_time)
+    if buisness_hours_ending <= current_time <= buisness_hours_ending:
+        print("the window of action is good")
+        return True
+    else:
+        return False
+
+
+check_time()
