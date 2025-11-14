@@ -1,7 +1,6 @@
-import re
 import time
 import random
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional, Callable
 from typing import List, Optional, Callable, Tuple
 from datetime import datetime, timedelta, time as dt_time
@@ -22,32 +21,42 @@ class EmailScheduler:
     Helps avoid detection by automated spam filters through randomized delays.
     """
 
-    def __init__(self , max_email_a_day = 70 , max_email_an_hour = 30 , buisness_hours_starting : dt_time = dt_time(9,0) , buisness_hours_ending : dt_time = dt_time(17,0) , enable_loggin_info : bool = True):
+    def __init__(
+        self,
+        max_email_a_day=70,
+        max_email_an_hour=30,
+        buisness_hours_starting: dt_time = dt_time(9, 0),
+        buisness_hours_ending: dt_time = dt_time(17, 0),
+        enable_loggin_info: bool = True,
+    ):
+        # when the program will fire it will a time interval until it starts sending depending on the time
         self.morning_intervals = [
             timedelta(hours=1, minutes=10, seconds=20),
             timedelta(hours=1, minutes=20, seconds=45),
             timedelta(hours=1, minutes=30, seconds=35),
             timedelta(hours=1, minutes=0, seconds=59),
         ]
+        # when the program will fire it will a time interval until it starts sending depending on the time
         self.evening_intervals = [
             timedelta(hours=1, minutes=0, seconds=35),
             timedelta(hours=1, minutes=15),
             timedelta(minutes=33),
             timedelta(minutes=47, seconds=56),
         ]
-        self.noon_interval = timedelta(hours=1)
+        # if it is noon then am only gonna skip the lunch time
+        self.noon_interval = timedelta(hours=1, minutes=5, seconds=45)
 
         # buisness hours set up
         self.buisness_hours_starting: dt_time = buisness_hours_starting
         self.buisness_hours_ending: dt_time = buisness_hours_ending
 
         # rate limit of sending emails
-        self.max_email_an_hour  = max_email_an_hour
+        self.max_email_an_hour = max_email_an_hour
         self.max_email_a_day = max_email_a_day
         # enable loggins
         self.enable_loggin_info = enable_loggin_info
 
-        #emails quotas a day and an hour 
+        # emails quotas a day and an hour
         self.max_email_an_hour = max_email_an_hour
         self.max_email_a_day = max_email_a_day
 
@@ -110,7 +119,9 @@ class EmailScheduler:
         else:
             return False
 
-    def get_random_delay_to_start_sending(self) -> timedelta:
+    def get_random_delay_to_start_sending(
+        self, priority: PriorityState = PriorityState.NORMAL
+    ):
         """
         Get a random delay based on current time of day.
         in a more dumb way this will select the time of action
@@ -122,11 +133,20 @@ class EmailScheduler:
             hour = now.hour
 
             if hour < 12:
-                return random.choice(self.morning_intervals)
+                base_delay = random.choice(self.morning_intervals)
             elif hour == 12:
-                return self.noon_interval
+                base_delay = self.noon_interval
             else:
-                return random.choice(self.evening_intervals)
+                base_delay = random.choice(self.evening_intervals)
+
+            # adjusting based on priority
+            if priority == PriorityState.URGENT:
+                base_delay = base_delay * 0.3
+            elif priority == PriorityState.HIGH:
+                base_delay = base_delay * 0.6
+            elif priority == PriorityState.LOW:
+                base_delay = base_delay * 1.2
+
         except Exception as e:
             raise RuntimeError(f"Error calculating random delay: {e}")
 
@@ -172,7 +192,6 @@ class EmailScheduler:
     ) -> None:
         """
         Waiting for a random interval between min and max seconds after each email is sent
-        useful for adding variability
         """
         wait_time = random.randint(min_seconds, max_seconds)
         logging.info(f"Waiting {wait_time} seconds before next action...")
@@ -195,12 +214,20 @@ class EmailScheduler:
             self.emails_sent_today = 0
             self.current_day_start = current_day
             self.logger.info("Daily counter reset")
-    
-    def check_email_max_rate(self) -> Tuple[bool , str] : 
-        reset_hourly_counter = self.reset_hourly_counter()
-        reset_daily_counter = self.reset_daily_counter()
 
-        if self.emails_sent_current_hour >= self.max
+    def check_email_max_rate(self) -> Tuple[bool, str]:
+        self.reset_hourly_counter()
+        self.reset_daily_counter()
+
+        if self.emails_sent_current_hour >= self.max_email_an_hour:
+            return (
+                False,
+                f"warning the hourly quotas of emails has been reached ({self.max_email_an_hour}/hour)",
+            )
+
+        if self.email_sent_during_a_day >= self.max_email_a_day:
+            return False, "warning the daily quotas of emails in 24h has been reached"
+        return True, "GOOD the quotas are respected"
 
     def reset_daily_email_counter(self) -> None:
         now = self.get_current_time()
@@ -210,21 +237,47 @@ class EmailScheduler:
             self.current_day_start = current_day
             self.logger.info("daily email quotas a day has been reached")
 
+    def get_next_buisness_hour(self):
+        now = self.get_current_time()
+        next_time = now
 
-# Example usage
-# # if __name__ == "__main__":
-# #     scheduler = EmailScheduler()
-# #
-#     # Define what to do when scheduled time is reached
-#     def send_email():
-#         print("📧 Sending email now!")
-#         # Your email sending logic goes here
-#
-#     # Schedule a single email
-#     scheduler.schedule_next_run(callback=send_email)
-#     # Or schedule multiple emails with random intervals
-#     # for i in range(3):
-#     #     print(f"\n--- Email {i+1} ---")
-#     #     scheduler.schedule_next_run(callback=send_email)
-#     #     if i < 2:  # Don't wait after the last email
-#     #         scheduler.wait_random_interval(min_seconds=60, max_seconds=300)
+        if next_time.weekday() >= 5:
+            self.logger.info(
+                "this is the weekend the program will skip to the next day"
+            )
+            next_time += timedelta(days=1)
+
+        next_time = next_time.replace(
+            self.buisness_hours_starting.hour,
+            self.buisness_hours_starting.minute,
+            second=0,
+            microsecond=0,
+        )
+
+        if now.time() >= self.buisness_hours_ending:
+            next_time += timedelta(days=1)
+            while next_time.weekday() >= 5:
+                next_time += timedelta(days=1)
+        return next_time
+
+    # this function has been generated by claude :
+    def calculate_next_send_time(
+        self,
+        suggested_time,
+        priority: PriorityState = PriorityState.NORMAL,
+        respected_buisness_hours: bool = True,
+    ) -> datetime:
+        now = self.get_current_time()
+        delay = self.get_random_delay_to_start_sending(priority)
+        if delay is not None and now is not None:
+            suggested_time = now + delay
+        if respected_buisness_hours:
+            if not self.is_buisness_hours(suggested_time):
+                next_buisness_hour = self.get_next_buisness_hour()
+                random_start_delay = timedelta(minutes=random.randint(5, 30))
+                suggested_time = next_buisness_hour + random_start_delay
+                self.logger.info(
+                    f"adjusted to the next buisness hour : {suggested_time}"
+                )
+
+        return suggested_time

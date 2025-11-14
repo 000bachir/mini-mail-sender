@@ -3,12 +3,12 @@ supabase integration
 """
 
 import datetime
-import re
 from realtime import dataclass
 from supabase import Client, create_client
 from config import loading_env_variables
 from typing import Union
 import logging
+from utils.valid_email_check import UserManager
 
 """
     what do i need to do to make the script works just like i intend to : 
@@ -104,13 +104,13 @@ class DatabaseOperation:
         valid email patterns
     """
 
-    def valid_email_pattern(self, email: str):
-        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if re.fullmatch(pattern, email):
-            logging.info("the email provided is valid")
-        else:
-            logging.warning("the email provided doesn't have a valid structure")
-
+    # def valid_email_pattern(self, email: str):
+    #     pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    #     if re.fullmatch(pattern, email):
+    #         logging.info("the email provided is valid")
+    #     else:
+    #         logging.warning("the email provided doesn't have a valid structure")
+    #
     def checking_for_dupalicates(self, record: EmailRecord):
         try:
             duplicate = (
@@ -152,8 +152,13 @@ class DatabaseOperation:
 
     def seeding_the_database(self, record: EmailRecord):
         seeding = None
-        self.valid_email_pattern(record.email)  # check for valid email pattern
-        self.valid_record_needed(record)  # check if the required fields are available
+        valid_pattern = UserManager.valid_email_pattern(
+            record.email
+        )  # check for valid email pattern
+        if not valid_pattern:
+            logging.error("error the email is not in a correct format")
+        # check if the required fields are available
+        self.valid_record_needed(record)
         duplicates = self.checking_for_dupalicates(record)
         if duplicates:
             logging.info(f"email already in the database {record.email}")
