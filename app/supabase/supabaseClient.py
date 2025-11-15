@@ -48,15 +48,16 @@ class EmailRecord:
 
 
 class DatabaseOperation:
-    def __init__(self):
+    def __init__(self, enable_loggin: bool = True):
         self.client = supabase_client
 
-    # logging setup
-    if is_loggin:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
+        # logging setup
+        if enable_loggin:
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            )
+        self.logger = logging.getLogger(__name__)
 
     """
         checking the health of the database
@@ -120,15 +121,16 @@ class DatabaseOperation:
                 .execute()
             )
             if duplicate.data:
-                print(
+                self.logger.warning(
                     f"the email provided already exist in the database : {record.email} skipping"
                 )
                 return True
             return False
         except Exception as e:
-            raise RuntimeError(
+            self.logger.error(
                 f"failed checking for duplicate in the database please check the error above : {e}"
             )
+            raise
 
     """
         valid email record
@@ -143,7 +145,8 @@ class DatabaseOperation:
         }
         for field_name, value in required_fields.items():
             if not value:
-                raise ValueError(f"error the field {field_name} is required")
+                self.logger.error(f"error the field {field_name} is required")
+                raise ValueError
         return True
 
     """
@@ -156,12 +159,12 @@ class DatabaseOperation:
             record.email
         )  # check for valid email pattern
         if not valid_pattern:
-            logging.error("error the email is not in a correct format")
+            self.logger.error("error the email is not in a correct format")
         # check if the required fields are available
         self.valid_record_needed(record)
         duplicates = self.checking_for_dupalicates(record)
         if duplicates:
-            logging.info(f"email already in the database {record.email}")
+            self.logger.info(f"email already in the database {record.email}")
             return False
         # time of seeding :
         try:
@@ -191,12 +194,13 @@ class DatabaseOperation:
                 .execute()
             )
             if seeding and seeding.data is not None:
-                logging.info("the seeding of the database has been successful")
+                self.logger.info("the seeding of the database has been successful")
 
         except Exception as e:
-            raise RuntimeError(
+            self.logger.error(
                 f"failed to seed the database with data please check the error : {e}"
             )
+            raise RuntimeError
 
     """
         function that will count the number of rows in a database
@@ -207,11 +211,12 @@ class DatabaseOperation:
             rows = self.client.table("emails").select("*", count="exact").execute()
             logging.info(f"the number of rows in the database are : {rows.count}")
             if rows.count == 0:
-                print("the database has no rows inside of it")
+                self.logger.info("the database has no rows inside of it")
         except Exception as e:
-            raise RuntimeError(
+            self.logger.error(
                 f"error could not retreive how many rows are in the database for more info please check the error : {e}"
             )
+            raise RuntimeError
 
     """
         to fetch the emails stored in the database 
@@ -220,11 +225,14 @@ class DatabaseOperation:
     def FetchEmails(self):
         try:
             fetch = self.client.table("emails").select("email").execute()
-            if fetch and fetch.data is None:
-                logging.error("failed to fetch all of the email from the database")
+            if not fetch.data:
+                return self.logger.error(
+                    "failed to fetch all of the email from the database"
+                )
             else:
-                print(f"email fetched : {fetch.data}")
+                self.logger.info(f"email fetched : {fetch.data}")
         except Exception as e:
-            raise RuntimeError(
+            self.logger.error(
                 f"error operating the fetch request onto the database please check the error : {e}"
             )
+            raise RuntimeError

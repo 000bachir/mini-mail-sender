@@ -1,20 +1,24 @@
+from __future__ import annotations
+import logging
+from config import loading_env_variables
+import yagmail
+from typing import Dict, Optional, List, Union
+from enum import Enum
+from dataclasses import asdict, dataclass
+from supabase.supabaseClient import UserManager, DatabaseOperation
+
+
 """
 yagmail logic handler
 """
 
 """
 the mailer logic is gonna need those function : 
-    1- create a class of email status 
+    1- create a class of email status ==== done 
+    2- create a class that will hold the state of the emails if done correctly or not ==== done 
+    3- create a function that will load emails from the database ( for this i gotta use function from other classes )
 """
 
-
-from config import loading_env_variables
-import yagmail
-from typing import Dict, Optional, List
-from enum import Enum
-from typing import Union, Optional, Tuple
-from dataclasses import asdict, dataclass
-from __future__ import annotations
 
 # credentials
 email = loading_env_variables("EMAIL")
@@ -74,5 +78,43 @@ class EMAIL:
 
 
 class EmailSender:
-    def __init__(self, enable_loggin: bool = True) -> None:
-        pass
+    def __init__(
+        self,
+        email_user: Union[str, None] = email,
+        email_app_password: Union[str, None] = app_password,
+        enable_loggin: bool = True,
+    ) -> None:
+        self.email_user = email_user
+        self.email_app_password = email_app_password
+
+        if enable_loggin:
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            )
+            self.logger = logging.getLogger(__name__)
+
+        """
+            yagmail init process 
+        """
+        try:
+            self.yagmail = yagmail.SMTP(email_user, email_app_password)
+            self.logger.info("the initiation was correctly done")
+        except Exception as e:
+            self.logger.error(
+                f"error yagmail and user email and password did not initiated correctly : {e}"
+            )
+
+    def load_from_database(self):
+        db_operations = DatabaseOperation()
+        try:
+            loading_email_from_supabse = db_operations.FetchEmails()
+            if not loading_email_from_supabse:
+                self.logger.warning("couldn't load emails form the database")
+                return []
+            return loading_email_from_supabse
+        except Exception as e:
+            self.logger.error(
+                f"error during the operation of loading emails from the database : {e}"
+            )
+            raise RuntimeError
