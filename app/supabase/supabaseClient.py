@@ -95,7 +95,7 @@ class DatabaseOperation:
             if response_check.data:
                 latest = response_check.data[0]
                 logging.info(f"status: {latest['status']} at {latest['timestamp']}")
-                return True
+                return latest
             return False
         except Exception as e:
             raise RuntimeError(f"check failed please see the error above: {e}")
