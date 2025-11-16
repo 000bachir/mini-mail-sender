@@ -1,12 +1,14 @@
 from __future__ import annotations
 import logging
+
+from yagmail import password
 from config import loading_env_variables
 import yagmail
 from typing import Dict, Optional, List, Union
 from enum import Enum
 from dataclasses import asdict, dataclass
 from supabase.supabaseClient import UserManager, DatabaseOperation
-
+from queue import Queue
 
 """
 yagmail logic handler
@@ -105,7 +107,7 @@ class EmailSender:
                 f"error yagmail and user email and password did not initiated correctly : {e}"
             )
 
-    def load_from_database(self):
+    def load_emails_from_database(self):
         db_operations = DatabaseOperation()
         try:
             loading_email_from_supabse = db_operations.FetchEmails()
@@ -117,4 +119,16 @@ class EmailSender:
             self.logger.error(
                 f"error during the operation of loading emails from the database : {e}"
             )
+            raise RuntimeError
+
+    def saving_emails_in_queue(self, emails: List[str]):
+        try:
+            queue_init = Queue()
+            if queue_init.empty():
+                self.logger.info("the queue is empty and ready to receive emails")
+            for email in emails:
+                queue_init.put(email)
+            return queue_init
+        except Exception as e:
+            self.logger.error(f"error something bad happened : {e}")
             raise RuntimeError

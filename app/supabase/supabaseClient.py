@@ -3,10 +3,11 @@ supabase integration
 """
 
 import datetime
+from postgrest import CountMethod
 from realtime import dataclass
 from supabase import Client, create_client
 from config import loading_env_variables
-from typing import Union
+from typing import Union, Any
 import logging
 from utils.valid_email_check import UserManager
 
@@ -208,7 +209,11 @@ class DatabaseOperation:
 
     def countRows(self):
         try:
-            rows = self.client.table("emails").select("*", count="exact").execute()
+            rows = (
+                self.client.table("emails")
+                .select("*", count=CountMethod.exact)
+                .execute()
+            )
             logging.info(f"the number of rows in the database are : {rows.count}")
             if rows.count == 0:
                 self.logger.info("the database has no rows inside of it")
@@ -224,13 +229,17 @@ class DatabaseOperation:
 
     def FetchEmails(self):
         try:
-            fetch = self.client.table("emails").select("email").execute()
-            if not fetch.data:
-                return self.logger.error(
-                    "failed to fetch all of the email from the database"
-                )
+            email_request = self.client.table("emails").select("email").execute()
+            if not email_request.data:
+                self.logger.error("failed to fetch all of the email from the database")
+                return []
             else:
-                self.logger.info(f"email fetched : {fetch.data}")
+                self.logger.info(f"email fetched in dict format : {email_request.data}")
+            # transforming it into a list for ease of use :
+            email_list = [row["email"] for row in email_request.data]
+            self.logger.info("successfuly fetched the emails in a list format")
+            return email_list
+
         except Exception as e:
             self.logger.error(
                 f"error operating the fetch request onto the database please check the error : {e}"
