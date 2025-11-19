@@ -1,14 +1,16 @@
 from __future__ import annotations
+import datetime
 import logging
+from pathlib import Path
 
-from yagmail import password
 from config import loading_env_variables
 import yagmail
 from typing import Dict, Optional, List, Union
 from enum import Enum
 from dataclasses import asdict, dataclass
-from supabase.supabaseClient import UserManager, DatabaseOperation
+from supabase.supabaseClient import DatabaseOperation
 from queue import Queue
+from utils.valid_email_check import EmailManager
 
 """
 yagmail logic handler
@@ -25,6 +27,10 @@ the mailer logic is gonna need those function :
 # credentials
 email = loading_env_variables("EMAIL")
 app_password = loading_env_variables("GMAIL_APP_PASSWORD")
+
+
+# TODO : ADD STRING PATH FOR THE RESUME TO BE SENT
+attachement = ""
 
 
 class EmailStatus(Enum):
@@ -132,3 +138,47 @@ class EmailSender:
         except Exception as e:
             self.logger.error(f"error something bad happened : {e}")
             raise RuntimeError
+
+    def validate_email(self, email: EMAIL) -> bool:
+        if not email.to or not email.subject or not email.body:
+            self.logger.error(f"missign required feiled to send email {email.email_id}")
+            return False
+
+        if email.attachments:
+            if not Path(attachement).exists():
+                self.logger.error(f"error could not find attachement properly")
+                return False
+            else:
+                self.logger.info("success found email attachement")
+        return True
+
+    def send_single_email(self, email: EMAIL):
+        email_manager = EmailManager()
+        try:
+            if email_manager.valid_email_pattern(email):
+                self.logger.warning("warning the email provided is not acceptable")
+                email.status = EmailStatus.FAILED
+                email.error_message = "validation failed"
+                return False
+            self.logger.info("---------sending process is starting---------")
+
+            attachement = email.attachments if email.attachments else None
+            self.yagmail.send(
+                to=email.to,
+                subject=email.subject,
+                contents=email.body,
+                attachement=attachement,
+                cc=email.cc,
+                bcc=email.bcc,
+            )
+
+            email.status = EmailStatus.SUCCESS
+            email.priority = EmailPriority.NORMAL
+            email.sent_at = datetime.datetime().now().strftime("%H:%M:%S")
+            return True
+        except Exception as e:
+            self.logger.error("error could not send email properly")
+            email.error_message = str(e)
+            email.status = EmailStatus.FAILED
+            raise RuntimeError
+            return False

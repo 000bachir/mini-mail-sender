@@ -2,9 +2,9 @@ import re
 import logging
 
 
-class UserManager:
+class EmailManager:
     @staticmethod
-    def valid_email_pattern(email: str):
+    def valid_email_pattern(email):
         pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if re.fullmatch(pattern, email):
             logging.info("the email provided is valid")

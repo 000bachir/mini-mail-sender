@@ -9,7 +9,7 @@ from supabase import Client, create_client
 from config import loading_env_variables
 from typing import Union, Any
 import logging
-from utils.valid_email_check import UserManager
+from utils.valid_email_check import EmailManager
 
 """
     what do i need to do to make the script works just like i intend to : 
@@ -156,7 +156,7 @@ class DatabaseOperation:
 
     def seeding_the_database(self, record: EmailRecord):
         seeding = None
-        valid_pattern = UserManager.valid_email_pattern(
+        valid_pattern = EmailManager.valid_email_pattern(
             record.email
         )  # check for valid email pattern
         if not valid_pattern:
