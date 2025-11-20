@@ -1,14 +1,14 @@
 from __future__ import annotations
 import datetime
+from datetime import datetime
 import logging
 from pathlib import Path
-
-from config import loading_env_variables
+from configuration.config import loading_env_variables
 import yagmail
 from typing import Dict, Optional, List, Union
 from enum import Enum
 from dataclasses import asdict, dataclass
-from supabase.supabaseClient import DatabaseOperation
+from app.supabase.supabaseClient import DatabaseOperation
 from queue import Queue
 from utils.valid_email_check import EmailManager
 
@@ -63,7 +63,7 @@ class EMAIL:
     status: EmailStatus = EmailStatus.PENDING
     created_at: Optional[str] = None
     scheduled_for: Optional[str] = None
-    sent_at: Optional[str] = None
+    sent_at: Optional[Union[str, datetime]] = None
     retry_count: int = 0
     max_retries: int = 3
     error_message: Optional[str] = None
@@ -146,7 +146,7 @@ class EmailSender:
 
         if email.attachments:
             if not Path(attachement).exists():
-                self.logger.error(f"error could not find attachement properly")
+                self.logger.error("error could not find attachement properly")
                 return False
             else:
                 self.logger.info("success found email attachement")
@@ -174,7 +174,7 @@ class EmailSender:
 
             email.status = EmailStatus.SUCCESS
             email.priority = EmailPriority.NORMAL
-            email.sent_at = datetime.datetime().now().strftime("%H:%M:%S")
+            email.sent_at = datetime.now()
             return True
         except Exception as e:
             self.logger.error("error could not send email properly")

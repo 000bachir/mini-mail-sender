@@ -1,10 +1,9 @@
 """
-the load virtual environement variables
+to load virtual environement variables
 """
 
 import os
 from dotenv import load_dotenv, dotenv_values, find_dotenv
-from typing import Optional, List
 
 
 def loading_env_variables(variable: str):
