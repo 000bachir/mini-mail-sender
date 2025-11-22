@@ -2,15 +2,16 @@
 supabase integration
 """
 
+from __future__ import annotations
 from dataclasses import asdict
 import datetime
+import re
 from postgrest import CountMethod
 from realtime import dataclass
 from supabase import Client, create_client
 from configuration.config import loading_env_variables
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Optional, Union
 import logging
-from utils.valid_email_check import EmailManager
 from enum import Enum
 
 #! env var keys
@@ -32,6 +33,10 @@ class EmailRecord:
 
     def _to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> EmailRecord:
+        return cls(**data)
 
 
 class EmailCategory:
@@ -77,6 +82,9 @@ class DatabaseOperation:
     def get_timestamps(self):
         return datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
+    # ============================================================================
+    # HEALTH CHECK METHODS
+    # ============================================================================
     def check_health(self):
         timestamp = self.get_timestamps()
         try:
@@ -94,12 +102,6 @@ class DatabaseOperation:
             ).execute()
             self.logger.error(f"could not chekc the database health cause : {e}\n")
             return False
-
-    """
-
-    checking the connection
-
-    """
 
     def get_latest_health_status(self):
         try:
@@ -126,13 +128,20 @@ class DatabaseOperation:
         valid email patterns
     """
 
-    # def valid_email_pattern(self, email: str):
-    #     pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-    #     if re.fullmatch(pattern, email):
-    #         logging.info("the email provided is valid")
-    #     else:
-    #         logging.warning("the email provided doesn't have a valid structure")
-    #
+    # ============================================================================
+    # VALIDATION METHODS
+    # ============================================================================
+    def valid_email_pattern(self, email: str) -> bool:
+        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if re.fullmatch(pattern, email):
+            self.logger.info("the email provided is valid")
+            return True
+        else:
+            self.logger.warning(
+                f"the email provided doesn't have a valid structure : {email}"
+            )
+            return False
+
     def checking_for_dupalicates(self, record: EmailRecord) -> bool:
         try:
             duplicate = (
@@ -151,13 +160,13 @@ class DatabaseOperation:
             self.logger.error(
                 f"failed checking for duplicate in the database please check the error above : {e}"
             )
-            raise
+            raise RuntimeError
 
     """
         valid email record
     """
 
-    def valid_record_needed(self, record: EmailRecord):
+    def validate_record(self, record: EmailRecord):
         required_fields = {
             "email": record.email,
             "language": record.language,
@@ -170,31 +179,30 @@ class DatabaseOperation:
                 raise ValueError
         return True
 
-    """
-        seeding the database with test emails 
-    """
-
+    # ============================================================================
+    # INSERT METHODS
+    # ============================================================================
     def insert_email(self, record: EmailRecord):
         try:
             seeding = None
-            valid_pattern = EmailManager.valid_email_pattern(
-                record.email
-            )  # check for valid email pattern
+            valid_pattern = self.valid_email_pattern(record.email)
+            # check for valid email pattern
             if not valid_pattern:
                 self.logger.error(
-                    "error the email format is invalid please check again"
+                    "error the email format is invalid please check again\n"
                 )
+                return None
             # check if the required fields are available
-            valid_record = self.valid_record_needed(record)
+            valid_record = self.validate_record(record)
             if not valid_record:
-                self.logger.error("error missing required email record")
+                self.logger.error("error missing required email record\n")
 
             duplicates = self.checking_for_dupalicates(record)
             if duplicates:
-                self.logger.info(f"email already in the database {record.email}")
+                self.logger.info(f"email already in the database {record.email}\n")
                 return False
 
-            logging.warning("the process of seeding the database is being initiated")
+            logging.warning("the process of seeding the database is being initiated\n")
             # normalizing timestamp
             if isinstance(record.added_at, str):
                 record.added_at = datetime.datetime.now().isoformat()
@@ -202,23 +210,7 @@ class DatabaseOperation:
                 record.last_contacted_at = record.added_at = (
                     datetime.datetime.now().isoformat()
                 )
-            # seeding = (
-            #     self.client.table(self.table_name)
-            #     .insert(
-            #         {
-            #             "email": record.email,
-            #             "full_name": record.full_name,
-            #             "category": record.category,
-            #             "language": record.language,
-            #             "source": record.source,
-            #             "added_at": record.added_at,
-            #             "status": record.status,
-            #             "notes": record.notes,
-            #             "last_contacted_at": record.last_contacted_at,
-            #         }
-            #     )
-            #     .execute()
-            # )
+            # insertation
             seeding = (
                 self.client.table(self.table_name).insert(record._to_dict()).execute()
             )
@@ -227,39 +219,39 @@ class DatabaseOperation:
 
         except Exception as e:
             self.logger.error(
-                f"failed to seed the database with data please check the error :{e}\n"
+                f"failed to insert the database with data please check the error :{e}\n"
             )
             raise RuntimeError
 
-    """
-        function that will count the number of rows in a database
-    """
-
-    def countRows(self):
+    # ============================================================================
+    # COUNT METHODS
+    # ============================================================================
+    def count_rows_in_database(self):
         try:
             rows = (
                 self.client.table("emails")
                 .select("*", count=CountMethod.exact)
                 .execute()
             )
-            logging.info(f"the number of rows in the database are : {rows.count}")
+            logging.info(f"the number of rows in the database are : {rows.count}\n")
             if rows.count == 0:
-                self.logger.info("the database has no rows inside of it")
+                self.logger.info("the database has no rows inside of it\n")
         except Exception as e:
             self.logger.error(
-                f"error could not retreive how many rows are in the database for more info please check the error : {e}"
+                f"error could not retreive how many rows are in the database for more info please check the error : {e}\n"
             )
             raise RuntimeError
 
-    """
-        to fetch the emails stored in the database 
-    """
-
-    def FetchEmails(self):
+    # ============================================================================
+    # FETCH METHODS
+    # ============================================================================
+    def fetch_all_emails(self):
         try:
-            email_request = self.client.table("emails").select("email").execute()
+            email_request = self.client.table(self.table_name).select("email").execute()
             if not email_request.data:
-                self.logger.error("failed to fetch all of the email from the database")
+                self.logger.error(
+                    "failed to fetch all of the email from the database\n"
+                )
                 return []
             # transforming it into a list for ease of use :
             email_list = [row["email"] for row in email_request.data]
@@ -270,6 +262,109 @@ class DatabaseOperation:
 
         except Exception as e:
             self.logger.error(
-                f"error operating the fetch request onto the database please check the error : {e}"
+                f"error operating the fetch request onto the database please check the error : {e}\n"
             )
             raise RuntimeError
+
+    def fetch_email_by_status(self, status: str) -> List[EmailRecord]:
+        try:
+            request = (
+                self.client.table(self.table_name)
+                .select("*")
+                .eq("status", status)
+                .execute()
+            )
+            if not request.data:
+                self.logger.error("could not return the status from the database\n")
+                return []
+            records = []
+            for row in request.data:
+                record = EmailRecord.from_dict(row)
+                records.append(record)
+            self.logger.info(f"found the {len(records)} with the status {status}\n")
+            return records
+        except Exception as e:
+            self.logger.error(
+                f"error could not fetch the emails based on status please check the logging info : {e}\n"
+            )
+            raise
+
+    def fetch_by_category(self, category: str) -> List[EmailRecord]:
+        try:
+            category_request = (
+                self.client.table(self.table_name)
+                .select("category")
+                .eq("category", category)
+                .execute()
+            )
+            if not category_request:
+                self.logger.error("no category to fetch\n")
+                return []
+            category_request_records = []
+            for row in category_request_records:
+                category_request_record = EmailRecord.from_dict(row)
+                category_request_records.append(category_request_record)
+            return category_request_records
+        except Exception as e:
+            self.logger.error(f"error the fetch request failed : {e}\n ")
+            raise
+
+    # ============================================================================
+    # UPDATE METHODS
+    # ============================================================================
+    def update_email_status(
+        self, new_status: str, email: str
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            update_request = (
+                self.client.table(self.table_name)
+                .update(
+                    {"status": new_status, "last_contacted_at": self.get_timestamps()}
+                )
+                .eq("email", email)
+                .execute()
+            )
+            if update_request.data:
+                self.logger.info(f"status updated :  {new_status} for {email}\n")
+                return update_request.data[0]
+            self.logger.warning("no record found to update\n")
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"failed to procced with the update of the status , error : {e}\n"
+            )
+            raise
+
+    # ============================================================================
+    # DELETE METHODS
+    # ============================================================================
+    def delete_email(self, email: str) -> bool:
+        try:
+            delete_email_request = (
+                self.client.table(self.table_name).delete().eq("email", email).execute()
+            )
+            if delete_email_request:
+                self.logger.warning(f"email deleted : {email}")
+                return True
+            else:
+                self.logger.info("no record found to delete")
+                return False
+        except Exception as e:
+            self.logger.error(
+                f"the deletion process failed please check the error : {e}\n"
+            )
+            raise
+
+    def delete_email_by_status(self, status: str) -> Optional[Union[int, Any]]:
+        try:
+            delete_email_request = (
+                self.client.table(self.table_name).delete().eq("email", email).execute()
+            )
+            count = len(delete_email_request.data) if delete_email_request.data else 0
+            self.logger.info(f"Deleted {count} emails with status '{status}'")
+            return count
+        except Exception as e:
+            self.logger.error(
+                f"the deletion process failed please check the error : {e}\n"
+            )
+            raise
