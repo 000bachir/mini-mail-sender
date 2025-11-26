@@ -357,14 +357,42 @@ class DatabaseOperation:
 
     def delete_email_by_status(self, status: str) -> Optional[Union[int, Any]]:
         try:
-            delete_email_request = (
-                self.client.table(self.table_name).delete().eq("email", email).execute()
+            delete_email_by_status_request = (
+                self.client.table(self.table_name)
+                .delete()
+                .eq("email", EmailRecord.email)
+                .execute()
             )
-            count = len(delete_email_request.data) if delete_email_request.data else 0
+            count = (
+                len(delete_email_by_status_request.data)
+                if delete_email_by_status_request.data
+                else 0
+            )
             self.logger.info(f"Deleted {count} emails with status '{status}'")
             return count
         except Exception as e:
             self.logger.error(
                 f"the deletion process failed please check the error : {e}\n"
+            )
+            raise
+
+    def delete_email_by_category(self, category: str) -> Optional[Union[int, Any]]:
+        try:
+            delete_email_by_category = (
+                self.client.table(self.table_name)
+                .delete()
+                .eq("category", category)
+                .execute()
+            )
+            count = (
+                len(delete_email_by_category.data)
+                if delete_email_by_category.data
+                else 0
+            )
+            self.logger.warning(f"deleted {count} emails with category : {category} ")
+            return count
+        except Exception as e:
+            self.logger.error(
+                f"error could not proceede with the deletion by category see error : {e}"
             )
             raise
