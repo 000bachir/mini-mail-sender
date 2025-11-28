@@ -22,8 +22,8 @@ key = loading_env_variables("ANON_PUBLIC_KEY") or ""
 @dataclass
 class EmailRecord:
     email: str
-    added_at: Union[datetime.datetime, str]
-    last_contacted_at: Union[datetime.datetime, str]
+    added_at: Union[datetime.datetime, str, None] = None
+    last_contacted_at: Union[datetime.datetime, str, None] = None
     status: str = ""  # en attente , en cours d'envoie , operation fini
     full_name: str = ""
     category: str = ""
@@ -94,12 +94,12 @@ class DatabaseOperation:
             self.logger.info("health check passed correctly\n")
             return True
         except Exception as e:
-            self.client.table("healthcheck").insert(
-                {
-                    "status": "failed to check the database health",
-                    "timestamp": timestamp,
-                }
-            ).execute()
+            # self.client.table("healthcheck").insert(
+            #     {
+            #         "status": "failed to check the database health",
+            #         "timestamp": timestamp,
+            #     }
+            # ).execute()
             self.logger.error(f"could not chekc the database health cause : {e}\n")
             return False
 
@@ -142,17 +142,17 @@ class DatabaseOperation:
             )
             return False
 
-    def checking_for_dupalicates(self, record: EmailRecord) -> bool:
+    def checking_for_dupalicates(self, email: str) -> bool:
         try:
             duplicate = (
                 self.client.table(self.table_name)
                 .select("email")
-                .eq("email", record.email)
+                .eq("email", email)
                 .execute()
             )
             if duplicate.data:
                 self.logger.warning(
-                    f"the email provided already exist in the database : {record.email} skipping"
+                    f"the email provided already exist in the database : {email} skipping"
                 )
                 return True
             return False
@@ -197,7 +197,7 @@ class DatabaseOperation:
             if not valid_record:
                 self.logger.error("error missing required email record\n")
 
-            duplicates = self.checking_for_dupalicates(record)
+            duplicates = self.checking_for_dupalicates(record.email)
             if duplicates:
                 self.logger.info(f"email already in the database {record.email}\n")
                 return False
