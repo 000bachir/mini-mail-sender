@@ -5,6 +5,7 @@ supabase integration
 from __future__ import annotations
 from dataclasses import asdict
 import datetime
+from os import stat
 import re
 from postgrest import CountMethod
 from realtime import dataclass
@@ -31,7 +32,7 @@ class EmailRecord:
     source: str = ""
     notes: str = ""
 
-    def _to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @classmethod
@@ -166,7 +167,7 @@ class DatabaseOperation:
         valid email record
     """
 
-    def validate_record(self, record: EmailRecord):
+    def validate_record(self, record: EmailRecord) -> Optional[Union[str, Any]]:
         required_fields = {
             "email": record.email,
             "language": record.language,
@@ -175,7 +176,7 @@ class DatabaseOperation:
         }
         for field_name, value in required_fields.items():
             if not value:
-                self.logger.error(f"error the field {field_name} is required")
+                self.logger.error(f"error the field {field_name} is required\n")
                 raise ValueError
         return True
 
@@ -184,9 +185,9 @@ class DatabaseOperation:
     # ============================================================================
     def insert_email(self, record: EmailRecord):
         try:
-            seeding = None
+            # chekc for valid email pattern
             valid_pattern = self.valid_email_pattern(record.email)
-            # check for valid email pattern
+            # logging the errro
             if not valid_pattern:
                 self.logger.error(
                     "error the email format is invalid please check again\n"
@@ -196,7 +197,7 @@ class DatabaseOperation:
             valid_record = self.validate_record(record)
             if not valid_record:
                 self.logger.error("error missing required email record\n")
-
+            # checking_for_dupalicates in the database
             duplicates = self.checking_for_dupalicates(record.email)
             if duplicates:
                 self.logger.info(f"email already in the database {record.email}\n")
@@ -211,17 +212,56 @@ class DatabaseOperation:
                     datetime.datetime.now().isoformat()
                 )
             # insertation
-            seeding = (
-                self.client.table(self.table_name).insert(record._to_dict()).execute()
+            insertion = (
+                self.client.table(self.table_name).insert(record.to_dict()).execute()
             )
-            if seeding and seeding.data is not None:
-                self.logger.info("email inserted successfully\n")
+            if insertion.data:
+                self.logger.info(
+                    f"Successfully insert {record.email} into the database"
+                )
+                return insertion.data[0]
+            return None
 
         except Exception as e:
             self.logger.error(
                 f"failed to insert the database with data please check the error :{e}\n"
             )
             raise RuntimeError
+
+    def insert_emails_in_bulk(
+        self, records: List[EmailRecord], skip_duplicate: bool = True
+    ) -> Dict[str, Any]:
+        stats = {
+            "failed": 0,
+            "skipped": 0,
+            "error": [],
+            "inserted": 0,
+            "total": len(records),
+        }
+        for record in records:
+            try:
+                if not self.valid_email_pattern(record.email):
+                    stats["failed"] += 1
+                    stats["error"].append(f"invalid format {record.email}")
+                    continue
+                if not self.validate_record(record):
+                    stats["failed"] += 1
+                    stats["error"].append(f"missing required record : {record}")
+                    continue
+                if skip_duplicate and self.checking_for_dupalicates(record.email):
+                    stats["skipped"] += 1
+                    continue
+                result = self.insert_email(record)
+                if result:
+                    stats["inserted"] += 1
+                else:
+                    stats["failed"] += 1
+            except Exception as e:
+                self.logger.error(
+                    f"error could not proceede with bulk insertion chekc error : {e}"
+                )
+        self.logger.info(f"bulk insertion completed : {stats}")
+        return stats
 
     # ============================================================================
     # COUNT METHODS

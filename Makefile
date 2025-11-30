@@ -10,3 +10,6 @@ time :
 	python -m app.scheduler.scheduler.py 
 testSender : 
 	python -m unittest app.Mailer.test_email_sender
+supabase_test : 
+	cd . && python -m pytest app/supabase/test_supabase_client.py
+

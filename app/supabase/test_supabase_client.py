@@ -44,6 +44,7 @@ def sample_email_record():
     )
 
 
+@pytest.fixture
 def sample_email_records():
     return [
         EmailRecord(
@@ -145,6 +146,51 @@ class TestValidation:
         with pytest.raises(ValueError) as error:
             database.validate_record(record)
         print(error.value)
+
+    def test_validate_record_with_missing_status(self, database):
+        record = EmailRecord(email="the_ultimate_user@gmail.com", status="")
+        with pytest.raises(ValueError) as error:
+            database.validate_record(record)
+        print("error : ", error.value)
+
+
+# ============================================================================
+# INSERT TESTS
+# ============================================================================
+class TestInsert:
+    def test_email_insertion_success(
+        self, database, mock_supabase_client, sample_email_record
+    ):
+        """Test successful email insertion."""
+        mock_response = Mock()
+        mock_response.data = [sample_email_record.to_dict()]
+
+        # Mock all the chained calls
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+        mock_supabase_client.table.return_value.insert.return_value.execute.return_value = mock_response
+
+        result = database.insert_email(sample_email_record)
+
+        assert result is not None
+        assert result["email"] == "ykami892@gmail.com"
+
+    def test_bult_insertion_insertion(
+        self, database, sample_email_records, mock_supabase_client
+    ):
+        mock_response_duplicates = Mock()
+        mock_response_duplicates.data = []
+
+        mock_insert_response = Mock()
+        mock_insert_response.data = [{"email": "ykami892@gmail.com"}]
+
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response_duplicates
+        mock_supabase_client.table.return_value.insert.return_value.execute.return_value = mock_insert_response
+
+        result = database.insert_emails_in_bulk(sample_email_records)
+        assert result["total"] == 5
+        assert result["inserted"] == 5
+        assert result["skipped"] == 0
+        assert result["failed"] == 0
 
 
 if __name__ == "__main__":
