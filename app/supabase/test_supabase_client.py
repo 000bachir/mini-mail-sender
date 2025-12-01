@@ -192,6 +192,132 @@ class TestInsert:
         assert result["skipped"] == 0
         assert result["failed"] == 0
 
+    def test_bulk_email_insertion_with_duplicates(
+        self, mock_supabase_client, sample_email_records, database
+    ):
+        def mock_duplicate_check(*args, **kwargs):
+            mock_response = Mock()
+            if "ykami892@gmail.com" in str(args):
+                mock_response.data = [{"email": "ykami892@gmail.com"}]
+            else:
+                mock_response.data = []
+            return mock_response
+
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.side_effect = mock_duplicate_check
+        result = database.insert_emails_in_bulk(
+            sample_email_records, skip_duplicate=True
+        )
+        assert result["skipped"] >= 0
+
+
+# ============================================================================
+# READ TESTS
+# ============================================================================
+class TestRead:
+    def test_fetch_all_email(self, database, mock_supabase_client):
+        mock_response = Mock()
+        mock_response.data = [
+            {"email": "user1@gmail.com"},
+            {"email": "user2@gmail.com"},
+            {"email": "user3@gmail.com"},
+        ]
+        mock_supabase_client.table.return_value.select.return_value.execute.return_value = mock_response
+        result = database.fetch_all_emails()
+        assert len(result) == 3
+        assert "user1@gmail.com" in result
+
+    def test_fetch_emails_with_empty_database(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = [
+            {
+                "email": "user1@example.com",
+                "full_name": "User 1",
+                "status": "pending",
+                "category": "business",
+                "language": "en",
+                "source": "website",
+                "notes": "",
+                "added_at": "2024-01-01T00:00:00",
+                "last_contacted_at": "2024-01-01T00:00:00",
+            }
+        ]
+        mock_supabase_client.table.return_value.select.return_value.execute.return_value = mock_response
+        result = database.fetch_all_emails()
+        assert len(result) == 1
+        assert result[0] == "user1@example.com"
+
+    def test_fetch_all_records(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = [
+            {
+                "email": "user1@example.com",
+                "full_name": "User 1",
+                "status": "pending",
+                "category": "business",
+                "language": "en",
+                "source": "website",
+                "notes": "",
+                "added_at": "2024-01-01T00:00:00",
+                "last_contacted_at": "2024-01-01T00:00:00",
+            }
+        ]
+        mock_supabase_client.table.return_value.select.return_value.execute.return_value = mock_response
+        result = database.fetch_all_records()
+        assert len(result) == 1
+        assert result[0].email == "user1@example.com"
+
+    def test_fetch_all_records_with_pagination(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = []
+        mock_request = Mock()
+        mock_request.limit.return_value.offset.return_value.execute.return_value = (
+            mock_response
+        )
+        mock_supabase_client.table.return_value.select.return_value = mock_request
+
+        result = database.fetch_all_records(limit=10, offset=5)
+        mock_request.limit.assert_called_with(10)
+        mock_request.limit.return_value.offset.assert_called_with(5)
+
+    def test_fetch_by_status(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = [
+            {
+                "email": "pending@example.com",
+                "status": EmailStatus.PENDING.value,
+                "full_name": "",
+                "category": "",
+                "language": "",
+                "source": "",
+                "notes": "",
+                "added_at": "2024-01-01T00:00:00",
+                "last_contacted_at": "2024-01-01T00:00:00",
+            }
+        ]
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        resutl = database.fetch_email_by_status(EmailStatus.PENDING.value)
+        assert len(resutl) == 1
+        assert resutl[0].status == EmailStatus.PENDING.value
+
+    def test_fetch_emails_by_categories(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = [
+            {
+                "email": "john.doe@example.com",
+                "full_name": "John Doe",
+                "status": "pending",
+                "category": EmailRecord.category,
+                "language": "",
+                "source": "",
+                "notes": "Important client",
+                "added_at": "2024-01-01T00:00:00",
+                "last_contacted_at": "2024-01-01T00:00:00",
+            }
+        ]
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        result = database.fetch_by_category(EmailRecord.category)
+        assert len(result) == 1
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-m", "not intergration"])

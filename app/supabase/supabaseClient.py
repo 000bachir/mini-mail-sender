@@ -285,7 +285,7 @@ class DatabaseOperation:
     # ============================================================================
     # FETCH METHODS
     # ============================================================================
-    def fetch_all_emails(self):
+    def fetch_all_emails(self) -> List[str]:
         try:
             email_request = self.client.table(self.table_name).select("email").execute()
             if not email_request.data:
@@ -294,7 +294,9 @@ class DatabaseOperation:
                 )
                 return []
             # transforming it into a list for ease of use :
-            email_list = [row["email"] for row in email_request.data]
+            email_list = []
+            for row in email_request.data:
+                email_list.append(row["email"])
             self.logger.info(
                 f"successfuly fetched the emails in a list format of lenght {len(email_list)}\n"
             )
@@ -305,6 +307,26 @@ class DatabaseOperation:
                 f"error operating the fetch request onto the database please check the error : {e}\n"
             )
             raise RuntimeError
+
+    def fetch_all_records(
+        self, limit: Optional[int] = None, offset: int = 0
+    ) -> List[EmailRecord]:
+        try:
+            request = self.client.table(self.table_name).select("*")
+
+            if limit:
+                request = request.limit(limit)
+            if offset:
+                request = request.offset(offset)
+            response = request.execute()
+            if not response.data:
+                return []
+            records = [EmailRecord.from_dict(row) for row in response.data]
+            self.logger.info(f"fetched : {len(records)} records")
+            return records
+        except Exception as e:
+            self.logger.error(f"error perfoming the fetch record function : {e}")
+            raise
 
     def fetch_email_by_status(self, status: str) -> List[EmailRecord]:
         try:
