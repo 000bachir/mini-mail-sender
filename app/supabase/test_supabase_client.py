@@ -316,7 +316,57 @@ class TestRead:
         ]
         mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
         result = database.fetch_by_category(EmailRecord.category)
+        if result:
+            print(result)
+        else:
+            print("something is wrong in the test")
         assert len(result) == 1
+
+    def test_search_by_email(self, mock_supabase_client, database):
+        mock_repsonse = Mock()
+        mock_repsonse.data = [
+            {
+                "email": "john.doe@example.com",
+                "full_name": "John Doe",
+                "status": "pending",
+                "category": "",
+                "language": "",
+                "source": "",
+                "notes": "Important client",
+                "added_at": "2024-01-01T00:00:00",
+                "last_contacted_at": "2024-01-01T00:00:00",
+            }
+        ]
+        mock_supabase_client.table.return_value.select.return_value.execute.return_value = mock_repsonse
+        resutl = database.search_emails("john")
+        assert len(resutl) >= 1
+
+
+# ============================================================================
+# UPADATE TESTS
+# ============================================================================
+class TestUpdate:
+    def test_update_email_status_success(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = {
+            "email": "test@example.com",
+            "status": EmailStatus.COMPLETED.value,
+        }
+
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
+        result = database.update_email_status(
+            "test@example.com", EmailStatus.COMPLETED.value
+        )
+        assert result is not None
+        assert result[0]["status"] == EmailStatus.COMPLETED.value
+
+    # def test_update_email_status_not_found(self, database, mock_supabase_client):
+    #     mock_response = Mock()
+    #     mock_response.data = []
+    #     mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
+    #     resutl = database.update_email_status("nonexistent@example.com", "completed")
+    #     assert resutl is None
+    #
 
 
 if __name__ == "__main__":

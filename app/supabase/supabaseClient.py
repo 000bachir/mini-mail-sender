@@ -7,6 +7,7 @@ from dataclasses import asdict
 import datetime
 from os import stat
 import re
+from annotated_types import LowerCase
 from postgrest import CountMethod
 from realtime import dataclass
 from supabase import Client, create_client
@@ -55,6 +56,7 @@ class EmailStatus(Enum):
     SUCCESS = "success"
     SCHEDULED = "scheduled"
     RETRYING = "retrying"
+    COMPLETED = "completed"
 
 
 class DatabaseOperation:
@@ -355,20 +357,46 @@ class DatabaseOperation:
         try:
             category_request = (
                 self.client.table(self.table_name)
-                .select("category")
+                .select("*")
                 .eq("category", category)
                 .execute()
             )
-            if not category_request:
+            if not category_request.data:
                 self.logger.error("no category to fetch\n")
                 return []
-            category_request_records = []
-            for row in category_request_records:
-                category_request_record = EmailRecord.from_dict(row)
-                category_request_records.append(category_request_record)
-            return category_request_records
+            category_response_records = []
+            for row in category_request.data:
+                category_response_record = EmailRecord.from_dict(row)
+                category_response_records.append(category_response_record)
+            return category_response_records
         except Exception as e:
             self.logger.error(f"error the fetch request failed : {e}\n ")
+            raise
+
+    def search_emails(
+        self, query: str, fields: List[str] = ["email", "full_name", "notes"]
+    ) -> List[EmailRecord]:
+        try:
+            # fetch all record
+            all_records = self.fetch_all_records()
+            # empty list to see to append the results
+            results = []
+            # make the query format in lower case to avoid case sensitive
+            query_format = query.lower().strip()
+            # iterate through all the record gotten form the database
+            for record in all_records:
+                # iterate through all the the fields gotten form the record
+                for field in fields:
+                    value = getattr(record, field, "")
+                    if value and query_format in value.lower():
+                        results.append(record)
+                        break
+            self.logger.info(f"Search found {len(results)} results for '{query}'")
+            return results
+        except Exception as e:
+            self.logger.error(
+                f"could not procced with the email search utility see error : {e}"
+            )
             raise
 
     # ============================================================================
@@ -386,11 +414,12 @@ class DatabaseOperation:
                 .eq("email", email)
                 .execute()
             )
+            if not update_request.data:
+                self.logger.warning("no record found to update\n")
+                return None
             if update_request.data:
-                self.logger.info(f"status updated :  {new_status} for {email}\n")
-                return update_request.data[0]
-            self.logger.warning("no record found to update\n")
-            return None
+                self.logger.info(f"status updated : {new_status} for {email}\n")
+            return update_request.data[0]
         except Exception as e:
             self.logger.error(
                 f"failed to procced with the update of the status , error : {e}\n"
