@@ -341,32 +341,71 @@ class TestRead:
         resutl = database.search_emails("john")
         assert len(resutl) >= 1
 
+    # ============================================================================
+    # UPADATE TESTS
+    # ============================================================================
 
-# ============================================================================
-# UPADATE TESTS
-# ============================================================================
+
 class TestUpdate:
     def test_update_email_status_success(self, mock_supabase_client, database):
         mock_response = Mock()
-        mock_response.data = {
-            "email": "test@example.com",
-            "status": EmailStatus.COMPLETED.value,
-        }
-
+        mock_response.data = [
+            {
+                "email": "test@example.com",
+                "status": EmailStatus.COMPLETED.value,
+            }
+        ]
         mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
         result = database.update_email_status(
             "test@example.com", EmailStatus.COMPLETED.value
         )
         assert result is not None
-        assert result[0]["status"] == EmailStatus.COMPLETED.value
+        assert result["status"] == EmailStatus.COMPLETED.value
 
-    # def test_update_email_status_not_found(self, database, mock_supabase_client):
-    #     mock_response = Mock()
-    #     mock_response.data = []
-    #     mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
-    #     resutl = database.update_email_status("nonexistent@example.com", "completed")
-    #     assert resutl is None
-    #
+    def test_update_email_status_not_found(self, database, mock_supabase_client):
+        mock_response = Mock()
+        mock_response.data = []
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
+        resutl = database.update_email_status("nonexistent@example.com", "completed")
+        assert resutl is None
+
+
+class TestDelete:
+    def test_delete_email(self, database, mock_supabase_client):
+        mock_response = Mock()
+        test_delete_email = "test.ecmascript@gmail.com"
+        mock_response.data = test_delete_email
+        mock_supabase_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = mock_response
+        result = database.delete_email(test_delete_email)
+        assert result is True
+
+    def test_delete_email_not_found(self, database, mock_supabase_client):
+        """Test deletion when email doesn't exist."""
+        mock_response = Mock()
+        mock_response.data = []
+        mock_supabase_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = mock_response
+        result = database.delete_email("nonexistent@example.com")
+        assert result is False
+
+    def test_delete_email_by_status(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = [
+            {"email": "user1@example.com"},
+            {"email": "user2@example.com"},
+        ]
+        mock_supabase_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = mock_response
+        result = database.delete_email_by_status("failed")
+        assert result == 2
+
+    def test_delete_email_by_category(self, mock_supabase_client, database):
+        mock_response = Mock()
+        mock_response.data = [
+            {"email": "user1@example.com"},
+            {"email": "user2@example.com"},
+        ]
+        mock_supabase_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = mock_response
+        result = database.delete_email_by_category("tech")
+        assert result == 2
 
 
 if __name__ == "__main__":

@@ -403,7 +403,7 @@ class DatabaseOperation:
     # UPDATE METHODS
     # ============================================================================
     def update_email_status(
-        self, new_status: str, email: str
+        self, email: str, new_status: str
     ) -> Optional[Dict[str, Any]]:
         try:
             update_request = (
@@ -419,7 +419,7 @@ class DatabaseOperation:
                 return None
             if update_request.data:
                 self.logger.info(f"status updated : {new_status} for {email}\n")
-            return update_request.data[0]
+                return update_request.data[0]
         except Exception as e:
             self.logger.error(
                 f"failed to procced with the update of the status , error : {e}\n"
@@ -434,11 +434,11 @@ class DatabaseOperation:
             delete_email_request = (
                 self.client.table(self.table_name).delete().eq("email", email).execute()
             )
-            if delete_email_request:
-                self.logger.warning(f"email deleted : {email}")
+            if delete_email_request.data:
+                self.logger.warning(f"email deleted : {email}\n")
                 return True
             else:
-                self.logger.info("no record found to delete")
+                self.logger.info("no record found to delete\n")
                 return False
         except Exception as e:
             self.logger.error(
@@ -451,7 +451,7 @@ class DatabaseOperation:
             delete_email_by_status_request = (
                 self.client.table(self.table_name)
                 .delete()
-                .eq("email", EmailRecord.email)
+                .eq("status", status)
                 .execute()
             )
             count = (
@@ -459,7 +459,7 @@ class DatabaseOperation:
                 if delete_email_by_status_request.data
                 else 0
             )
-            self.logger.info(f"Deleted {count} emails with status '{status}'")
+            self.logger.info(f"Deleted {count} emails with status '{status}'\n")
             return count
         except Exception as e:
             self.logger.error(
@@ -480,7 +480,7 @@ class DatabaseOperation:
                 if delete_email_by_category.data
                 else 0
             )
-            self.logger.warning(f"deleted {count} emails with category : {category} ")
+            self.logger.warning(f"deleted {count} emails with category : {category} \n")
             return count
         except Exception as e:
             self.logger.error(
