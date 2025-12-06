@@ -13,3 +13,5 @@ testSender :
 supabase_test : 
 	cd . && python -m pytest app/supabase/test_supabase_client.py
 
+scheduler_test : 
+	cd . && python -m pytest app/scheduler/test_scheduler.py
