@@ -24,7 +24,9 @@ class EmailScheduler:
         self,
         max_email_a_day=70,
         max_email_an_hour=30,
-        buisness_hours_starting: dt_time = dt_time(9, 0),
+        buisness_hours_starting: dt_time = dt_time(
+            9, 0
+        ),  # rule of thumb use "time" when for comparing or checking the time and timedelta for operation like adding
         buisness_hours_ending: dt_time = dt_time(17, 0),
         enable_loggin_info: bool = True,
     ):
@@ -103,8 +105,8 @@ class EmailScheduler:
             check_time = self.get_current_time()
         # check if it is the week end
         if check_time.weekday() >= 5:
-            logging.info(
-                "avoid using the program during week ends to avoid being flagged by google bots"
+            self.logger.warning(
+                "avoid using the program during week ends to avoid being flagged by google bots\n"
             )
             return False
         current_time = check_time.time()
@@ -113,7 +115,7 @@ class EmailScheduler:
             self.buisness_hours_starting <= current_time
             and current_time <= self.buisness_hours_ending
         ):
-            logging.info("the window of action is acceptable by the program")
+            self.logger.info("the window of action is acceptable by the program\n")
             return True
         else:
             return False
@@ -137,14 +139,13 @@ class EmailScheduler:
                 base_delay = self.noon_interval
             else:
                 base_delay = random.choice(self.evening_intervals)
-
             # adjusting based on priority
             if priority == PriorityState.URGENT:
-                base_delay = base_delay * 2.3
+                base_delay = base_delay * 1.4
             elif priority == PriorityState.HIGH:
-                base_delay = base_delay * 2.6
+                base_delay = base_delay * 1.1
             elif priority == PriorityState.LOW:
-                base_delay = base_delay * 3.2
+                base_delay = base_delay * 2
 
             return base_delay
         except Exception as e:
