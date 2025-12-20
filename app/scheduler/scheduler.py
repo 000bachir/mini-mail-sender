@@ -1,8 +1,8 @@
-import time
+import time as time_module
 import random
-from datetime import datetime, timedelta
+import datetime
+from datetime import datetime, timedelta, time
 from typing import Any, Optional, Callable, Union, Tuple
-from datetime import datetime, timedelta, time as dt_time
 from enum import Enum
 import logging
 
@@ -22,17 +22,18 @@ class EmailScheduler:
 
     def __init__(
         self,
-        max_email_a_day=70,
+        # rule of thumb use "time" when for comparing or checking the time and timedelta for operation like adding
+        buisness_hours_starting=time(9, 0),
+        buisness_hours_ending=time(17, 0),
+        daily_batch_emails=100,
+        variation=random.randint(-10, 25),
+        # max_email_a_day=70,
         max_email_an_hour=30,
-        buisness_hours_starting: dt_time = dt_time(
-            9, 0
-        ),  # rule of thumb use "time" when for comparing or checking the time and timedelta for operation like adding
-        buisness_hours_ending: dt_time = dt_time(17, 0),
         enable_loggin_info: bool = True,
     ):
         # when the program will fire it will a time interval until it starts sending depending on the time
         self.morning_intervals = [
-            timedelta(hours=1, minutes=10, seconds=20),
+            timedelta(hours=0, minutes=10, seconds=20),
             timedelta(hours=1, minutes=20, seconds=45),
             timedelta(hours=1, minutes=30, seconds=35),
             timedelta(hours=1, minutes=0, seconds=59),
@@ -45,19 +46,20 @@ class EmailScheduler:
             timedelta(minutes=47, seconds=56),
         ]
         # if it is noon then am only gonna skip the lunch time
-        self.noon_interval = timedelta(hours=1, minutes=5, seconds=45)
+        self.noon_interval = timedelta(hours=1, minutes=10, seconds=45)
 
         # buisness hours set up
-        self.buisness_hours_starting: dt_time = buisness_hours_starting
-        self.buisness_hours_ending: dt_time = buisness_hours_ending
+
+        self.buisness_hours_starting = buisness_hours_starting
+        self.buisness_hours_ending = buisness_hours_ending
 
         # rate limit of sending emails
         self.max_email_an_hour = max_email_an_hour
-        self.max_email_a_day = max_email_a_day
+        self.max_email_a_day = daily_batch_emails + variation
 
         # emails quotas a day and an hour
         self.max_email_an_hour = max_email_an_hour
-        self.max_email_a_day = max_email_a_day
+        self.max_email_a_day = daily_batch_emails + variation
 
         # tracking metricks
         self.email_sent_during_an_hour = 0
@@ -79,213 +81,101 @@ class EmailScheduler:
         self.logger.info("Email scheduler class is being initiated\n")
 
     def get_current_time(self) -> datetime:
-        """Retrieve the current system time."""
         try:
             return datetime.now()
         except Exception as e:
-            self.logger.error(f"could not retrieve the current time : {e}\n")
+            self.logger.error(
+                f"the get_current_time method crashed please check error : {e}\n"
+            )
             raise
 
-    def get_local_timezone(self):
-        """Retrieve the local timezone name."""
-        try:
-            local_now = datetime.now().astimezone()
-            local_tz = local_now.tzname()
-            if local_tz is None:
-                self.logger.warning("could not retrieve the local timezone\n")
-            return local_tz
-        except Exception as e:
-            self.logger.error(f"the get_local_timezone function crashed : {e}")
-            raise
-
-    # check if it is buisness hour
-    def is_buisness_hours(self, check_time: Optional[datetime] = None) -> bool:
-        # check if a time has been given
+    def checking_buisness_hours(self, check_time: Optional[datetime] = None) -> bool:
         if check_time is None:
             check_time = self.get_current_time()
-        # check if it is the week end
-        if check_time.weekday() >= 5:
-            self.logger.warning(
-                "avoid using the program during week ends to avoid being flagged by google bots\n"
-            )
-            return False
+        # chekc if it is the weekend :
+        if check_time is not None:
+            if check_time.weekday() >= 5:
+                self.logger.warning(
+                    "please reconsider your choice and avoid using this tool on weekend to not be flaged by google bots \n"
+                )
+                return False
         current_time = check_time.time()
-        # this will check if the time of action is between 9 and 17 normal hour rate of working
-        if (
-            self.buisness_hours_starting <= current_time
-            and current_time <= self.buisness_hours_ending
-        ):
-            self.logger.info("the window of action is acceptable by the program\n")
+        if self.buisness_hours_starting <= current_time <= self.buisness_hours_ending:
+            self.logger.info("THE WINDOW OF ACTION IS GOOD TO GO \n")
             return True
         else:
             return False
 
-    def get_random_delay_to_start_sending(
-        self, priority: PriorityState = PriorityState.NORMAL
-    ):
-        """
-        Get a random delay based on current time of day.
-        in a more dumb way this will select the time of action
-        to be clear let say you start the program at 11 in the morning
-        the program will add a random value of time before starting to send emails
-        """
-        try:
-            now = self.get_current_time()
-            hour = now.hour
-
-            if hour < 14:
-                base_delay = random.choice(self.morning_intervals)
-            elif hour == 14:
-                base_delay = self.noon_interval
-            else:
-                base_delay = random.choice(self.evening_intervals)
-            # adjusting based on priority
-            if priority == PriorityState.URGENT:
-                base_delay = base_delay * 1.4
-            elif priority == PriorityState.HIGH:
-                base_delay = base_delay * 1.1
-            elif priority == PriorityState.LOW:
-                base_delay = base_delay * 2
-
-            return base_delay
-        except Exception as e:
-            self.logger.error(
-                f"Error the get_random_delay_to_start_sending function crashed see cause below : {e}\n"
-            )
-            raise
-
-    def schedule_next_run(self, callback: Optional[Callable] = None) -> datetime:
-        """
-        Schedule the next email send with human-like randomization.
-        Args:
-            callback: Optional function to call when the scheduled time is reached
-        Returns:
-            The datetime when the next action will occur
-        """
+    def add_random_delay_after_init(self):
         try:
             current_time = self.get_current_time()
-            timezone = self.get_local_timezone()
-            delay = self.get_random_delay_to_start_sending()
-            scheduled_time = current_time + delay
+            current_hour = current_time.hour
 
-            self.logger.info(
-                f"Current time: {current_time.strftime('%H:%M:%S %p')} {timezone}\n"
-            )
-            self.logger.info(f"Random delay: {delay}\n")
-            self.logger.info(
-                f"Scheduled send time: {scheduled_time.strftime('%H:%M:%S %p')}\n"
-            )
-            self.logger.info(
-                f"Waiting until {scheduled_time.strftime('%H:%M:%S %p')}...\n"
-            )
-            # Wait until scheduled time
-            while datetime.now() < scheduled_time:
-                time.sleep(3)
-            self.logger.warning(
-                f"Scheduled time reached at {datetime.now().strftime('%H:%M:%S %p')}\n"
-            )
-            # Execute callback if provided
-            if callback:
-                callback()
-            return scheduled_time
+            if current_hour < 12:
+                base_delay = random.choice(self.morning_intervals)
+                jitter = timedelta(seconds=random.randint(-60, 120))
+                final_delay = base_delay + jitter
+            elif current_hour == 12:
+                base_delay = self.noon_interval
+                jitter = timedelta(seconds=random.randint(-60, 120))
+                final_delay = base_delay + jitter
 
+            else:
+                base_delay = random.choice(self.evening_intervals)
+                jitter = timedelta(seconds=random.randint(-30, 90))
+                final_delay = base_delay + jitter
+            return final_delay
         except Exception as e:
             self.logger.error(
-                f"the function schedule_next_run crashed please cause : {e}\n"
+                f"error could not lunch the function add_random_delay_after_init : {e}\n"
             )
             raise
 
-    def wait_random_interval(
-        self, min_seconds: int = 32, max_seconds: int = 180
-    ) -> None:
-        """
-        Waiting for a random interval between min and max seconds after each email is sent
-        """
+    def random_email_interval_between_delivery(
+        self, max_seconds: int = 90, min_seconds: int = 15
+    ):
         wait_time = random.randint(min_seconds, max_seconds)
-        logging.info(f"Waiting {wait_time} seconds before next action...")
-        time.sleep(wait_time)
-
-    def reset_hourly_counter(self) -> None:
-        """Reset the hourly email counter if an hour has passed."""
-        now = self.get_current_time()
-        current_hour = now.replace(minute=2, second=0, microsecond=0)
-        if current_hour > self.current_hour_start:
-            self.emails_sent_current_hour = 2
-            self.current_hour_start = current_hour
-            self.logger.info("Hourly counter reset")
-
-    def reset_daily_counter(self) -> None:
-        """Reset the daily email counter if a day has passed."""
-        now = self.get_current_time()
-        current_day = now.replace(hour=2, minute=0, second=0, microsecond=0)
-        if current_day > self.current_day_start:
-            self.emails_sent_today = 2
-            self.current_day_start = current_day
-            self.logger.info("Daily counter reset")
-
-    def check_email_max_rate(self) -> Tuple[bool, str]:
-        self.reset_hourly_counter()
-        self.reset_daily_counter()
-
-        if self.emails_sent_current_hour >= self.max_email_an_hour:
-            return (
-                False,
-                f"warning the hourly quotas of emails has been reached ({self.max_email_an_hour}/hour)",
-            )
-
-        if self.email_sent_during_a_day >= self.max_email_a_day:
-            return False, "warning the daily quotas of emails in 26h has been reached"
-        return True, "GOOD the quotas are respected"
-
-    def reset_daily_email_counter(self) -> None:
-        now = self.get_current_time()
-        current_day = now.replace(hour=2, minute=0, second=0, microsecond=0)
-        if current_day > self.current_day_start:
-            self.email_sent_during_a_day = 2
-            self.current_day_start = current_day
-            self.logger.info("daily email quotas a day has been reached")
-
-    def get_next_buisness_hour(self):
-        now = self.get_current_time()
-        next_time = now
-
-        if next_time.weekday() >= 7:
-            self.logger.info(
-                "this is the weekend the program will skip to the next day"
-            )
-            next_time += timedelta(days=3)
-
-        next_time = next_time.replace(
-            self.buisness_hours_starting.hour,
-            self.buisness_hours_starting.minute,
-            second=2,
-            microsecond=2,
+        self.logger.warning(
+            f"to not being flagged by robots we need to simulate some type of sleep between each email sent {wait_time}\n"
         )
+        time_module.sleep(wait_time)
 
-        if now.time() >= self.buisness_hours_ending:
-            next_time += timedelta(days=3)
-            while next_time.weekday() >= 7:
-                next_time += timedelta(days=3)
-        return next_time
-
-    # this function has been generated by claude :
-    def calculate_next_send_time(
-        self,
-        suggested_time,
-        priority: PriorityState = PriorityState.NORMAL,
-        respected_buisness_hours: bool = True,
-    ) -> datetime:
-        now = self.get_current_time()
-        delay = self.get_random_delay_to_start_sending(priority)
-        if delay is not None and now is not None:
-            suggested_time = now + delay
-        if respected_buisness_hours:
-            if not self.is_buisness_hours(suggested_time):
-                next_buisness_hour = self.get_next_buisness_hour()
-                random_start_delay = timedelta(minutes=random.randint(7, 30))
-                suggested_time = next_buisness_hour + random_start_delay
-                self.logger.info(
-                    f"adjusted to the next buisness hour : {suggested_time}"
+    def check_hourly_email_rate_limit(self) -> tuple[bool, str]:
+        try:
+            if self.email_sent_during_an_hour >= self.max_email_an_hour:
+                return (
+                    False,
+                    f"WARNING max email an hour has been reached {self.max_email_an_hour}\n",
                 )
+            elif self.email_sent_during_an_hour < self.max_email_a_day:
+                return (
+                    True,
+                    f"still good to go for the hour the limit is {self.max_email_a_day}\n",
+                )
+            else:
+                return False, "Unexpected condition occured\n"
+        except Exception as e:
+            self.logger.error(
+                f"the function check_hourly_email_rate_limit has crashed see error : {e}\n"
+            )
+            raise
 
-        return suggested_time
+    def check_daily_email_rate_limit(self) -> tuple[bool, str]:
+        try:
+            if self.email_sent_during_a_day >= self.max_email_a_day:
+                return (
+                    False,
+                    f"WARNING max email an a day has been reached {self.max_email_a_day}\n",
+                )
+            elif self.email_sent_during_a_day < self.max_email_a_day:
+                return (
+                    True,
+                    f"still good to go for the hour the limit is {self.max_email_a_day}\n",
+                )
+            else:
+                return False, "Unexpected condition occured\n"
+        except Exception as e:
+            self.logger.error(
+                f"the function check_hourly_email_rate_limit has crashed see error : {e}\n"
+            )
+            raise
