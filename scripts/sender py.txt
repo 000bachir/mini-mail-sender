@@ -1,3 +1,5 @@
+sender.py
+
 from __future__ import annotations
 import datetime
 from datetime import datetime
@@ -5,22 +7,29 @@ import logging
 from pathlib import Path
 from configuration.config import loading_env_variables
 import yagmail
-from typing import Any, Dict, Optional, List, Union
+from typing import Dict, Optional, List, Union
 from enum import Enum
 from dataclasses import asdict, dataclass
 from app.supabase.supabaseClient import DatabaseOperation
 from queue import Queue
 from utils.valid_email_check import EmailManager
-from utils.normalize_recipients import normalize_recipients
-
 
 """
 yagmail logic handler
 """
 
+"""
+the mailer logic is gonna need those function : 
+    1- create a class of email status ==== done 
+    2- create a class that will hold the state of the emails if done correctly or not ==== done 
+    3- create a function that will load emails from the database ( for this i gotta use function from other classes )
+"""
+
+
 # credentials
 email = loading_env_variables("EMAIL")
 app_password = loading_env_variables("GMAIL_APP_PASSWORD")
+
 
 # TODO : ADD STRING PATH FOR THE RESUME TO BE SENT
 attachement = "../assets/global english.pdf"
@@ -46,7 +55,7 @@ class EmailPriority(Enum):
 class EMAIL:
     """EMAIL STRUCTURE"""
 
-    to: Optional[Union[str, List[str]]]
+    to: Union[str, List[str]]
     subject: str
     body: str
     attachments: Optional[List[str]] = None
@@ -87,14 +96,13 @@ class EmailSender:
     ) -> None:
         self.email_user = email_user
         self.email_app_password = email_app_password
-        self.logger = logging.getLogger(__name__)
+
         if enable_loggin:
             logging.basicConfig(
                 level=logging.INFO,
                 format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             )
-        else:
-            self.logger.setLevel(logging.CRITICAL + 1)
+            self.logger = logging.getLogger(__name__)
 
         """
             yagmail init process 
@@ -104,9 +112,8 @@ class EmailSender:
             self.logger.info("the initiation was correctly done\n")
         except Exception as e:
             self.logger.error(
-                f"error the initiation could not proccede correctly : {e}\n"
+                f"user email and password did not initiated correctly : {e}"
             )
-            raise
 
     def load_emails_from_database(self):
         db_operations = DatabaseOperation()
@@ -122,39 +129,7 @@ class EmailSender:
             )
             raise RuntimeError
 
-    def validate_email_structure(self, email: EMAIL) -> bool:
-        try:
-            # Pyright:igonre
-            if not isinstance(email, EMAIL):
-                self.logger.warning(
-                    f"error the validate structure funcition received {type(email)}"
-                )
-                return False
-            email_to = normalize_recipients(email.to)
-            email_subject = normalize_recipients(email.subject)
-            email_body = normalize_recipients(email.body)
-            if not email_to or not email_subject or not email_body:
-                self.logger.warning(f"missing required field form the {email.email_id}")
-                return False
-
-            if email.attachments:
-                for attachement in email.attachments:
-                    if not Path(attachement).exists():
-                        self.logger.warning(
-                            "no attachement has been added by the user\n"
-                        )
-                        return False
-                    else:
-                        self.logger.info("found email attachement\n")
-            return True
-
-        except Exception as e:
-            self.logger.error(
-                f"the validate_email_structure funcition crashed please check the error : {e}\n"
-            )
-            raise
-
-    def saving_emails_in_queue(self, emails: List[EMAIL]):
+    def saving_emails_in_queue(self, emails: List[str]):
         try:
             queue_init = Queue()
             if queue_init.empty():
@@ -168,11 +143,25 @@ class EmailSender:
             )
             raise RuntimeError
 
+    def validate_email_structure(self, email: EMAIL) -> bool:
+        if not email.to or not email.subject or not email.body:
+            self.logger.error(
+                f"missign required feiled to send email {email.email_id}\n"
+            )
+            return False
+        if email.attachments:
+            if not Path(attachement).exists():
+                self.logger.error("error could not find attachement properly\n")
+                return False
+            else:
+                self.logger.info("success found email attachement\n")
+        return True
+
     def send_single_email(self, email: EMAIL):
         email_manager = EmailManager()
         try:
             if not email_manager.valid_email_pattern(email):
-                self.logger.error("error the email provided is not acceptable\n")
+                self.logger.error("warning the email provided is not acceptable\n")
                 email.status = EmailStatus.FAILED
                 email.error_message = "validation failed"
                 return False
@@ -183,16 +172,20 @@ class EmailSender:
                 to=email.to,
                 subject=email.subject,
                 contents=email.body,
-                attachments=attachement,
+                attachement=attachement,
                 cc=email.cc,
                 bcc=email.bcc,
             )
+
             email.status = EmailStatus.SUCCESS
             email.priority = EmailPriority.NORMAL
             email.sent_at = datetime.now()
             return True
         except Exception as e:
-            self.logger.error("error could not send email properly\n")
+            self.logger.error("error could not send email properly")
             email.error_message = str(e)
             email.status = EmailStatus.FAILED
             raise RuntimeError
+
+
+

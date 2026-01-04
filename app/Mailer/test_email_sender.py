@@ -1,73 +1,111 @@
-import unittest
-from unittest.mock import patch, MagicMock
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime
+from queue import Queue
+from app.Mailer.sender import EMAIL, EmailPriority, EmailSender, EmailStatus
+from configuration.config import loading_env_variables
 
-# from Mailer.sender import EMAIL, EmailStatus,  EmailSender
-from .sender import EMAIL, EmailStatus, EmailSender
-
-
-class TestEmailSender(unittest.TestCase):
-    @patch("app.Mailer.sender.yagmail.SMTP")
-    def setUp(self, mock_smtp):
-        # Initialize EmailSender with logging disabled to keep test output clean
-        self.sender = EmailSender()
-        # Mock the yagmail instance attached to the class
-        self.sender.yagmail = mock_smtp.return_value
-
-    @patch("app.Mailer.sender.DatabaseOperation")
-    def test_load_emails_from_database(self, MockDB):
-        # Setup mock return
-        mock_db_instance = MockDB.return_value
-        expected_emails = ["test1@example.com", "test2@example.com"]
-        mock_db_instance.FetchEmails.return_value = expected_emails
-
-        # Execute
-        result = self.sender.load_emails_from_database()
-
-        # Assert
-        self.assertEqual(result, expected_emails)
-        mock_db_instance.FetchEmails.assert_called_once()
-
-    def test_saving_emails_in_queue(self):
-        email_list = ["email1", "email2"]
-
-        # Execute
-        queue_result = self.sender.saving_emails_in_queue(email_list)
-
-        # Assert
-        self.assertFalse(queue_result.empty())
-        self.assertEqual(queue_result.qsize(), 2)
-
-    @patch("app.Mailer.sender.EmailManager")
-    def test_send_single_email_success(self, MockEmailManager):
-        # Setup
-        email_obj = EMAIL(to="user@test.com", subject="Hi", body="Body")
-
-        # Mock Validation to return False (meaning NO invalid pattern found based on your logic)
-        # Logic source: checks if pattern(email) is True, then fails.
-        MockEmailManager.return_value.valid_email_pattern.return_value = False
-
-        # Execute
-        result = self.sender.send_single_email(email_obj)
-
-        # Assert
-        self.assertTrue(result)
-        self.assertEqual(email_obj.status, EmailStatus.SUCCESS)
-        self.sender.yagmail.send.assert_called_once()
-
-    # @patch("tests.Path")
-    # def test_validate_email_with_attachment(self, MockPath):
-    #     # Setup
-    #     email_obj = EMAIL(to="u", subject="s", body="b", attachments=["resume.pdf"])
-    #
-    #     # Case: Attachment exists
-    #     MockPath.return_value.exists.return_value = True
-    #     self.assertTrue(self.sender.validate_email(email_obj))
-    #
-    #     # Case: Attachment missing
-    #     MockPath.return_value.exists.return_value = False
-    #     self.assertFalse(self.sender.validate_email(email_obj))
-    #
+email_personal = loading_env_variables("EMAIL")
+app_password_personal = loading_env_variables("GMAIL_APP_PASSWORD")
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.fixture
+def sample_email():
+    return EMAIL(
+        to="test_email@gmail.com",
+        subject="subject of the email",
+        body="this is the body of the email",
+        email_id="test_1",
+    )
+
+
+@pytest.fixture
+def sample_email_attachement(tmp_path):
+    test_file = tmp_path / "test.pdf"
+    test_file.write_bytes(b"%PDF fake content")
+
+    return EMAIL(
+        to="test_email@gmail.com",
+        subject="subject of the email",
+        body="this is the body of the email",
+        email_id="test_1",
+        attachments=[str(test_file)],
+    )
+
+
+@pytest.fixture
+def mock_yagmail():
+    with patch("app.Mailer.sender.yagmail.SMTP") as mock:
+        yield mock
+
+
+@pytest.fixture
+def email_sender(mock_yagmail):
+    with (
+        patch("app.Mailer.sender.email", "test_email@gmail.com"),
+        patch("app.Mailer.sender.app_password", "test_password"),
+    ):
+        sender = EmailSender(enable_loggin=False)
+        return sender
+
+
+class TestEmail:
+    def test_email_creation(self):
+        email = EMAIL(to="test_subject@gmail.com", subject="test", body="body")
+        assert email.to == "test_subject@gmail.com"
+        assert email.subject == "test"
+        assert email.body == "body"
+        assert email.status == EmailStatus.PENDING
+        assert email.priority == EmailPriority.NORMAL
+        assert email.retry_count == 0
+
+    def test_email_to_dict(self):
+        email = EMAIL(to="test_email@gmail.com", subject="test", body="body")
+        email_to_dict = email.to_dict()
+        assert email_to_dict["to"] == "test_email@gmail.com"
+        assert email_to_dict["subject"] == "test"
+        assert email_to_dict["body"] == "body"
+
+    def test_email_from_dict(self):
+        data = {
+            "to": "test@example.com",
+            "subject": "Test",
+            "body": "Body",
+            "priority": "high",
+            "status": "sent",
+            "attachments": None,
+            "cc": None,
+            "bcc": None,
+            "created_at": None,
+            "scheduled_for": None,
+            "sent_at": None,
+            "retry_count": 0,
+            "max_retries": 3,
+            "error_message": None,
+            "email_id": None,
+        }
+        email = EMAIL.from_dict(data)
+        assert email.to == "test@example.com"
+        assert email.priority == EmailPriority.HIGH
+        assert email.status == EmailStatus.SENT
+
+    def test_email_with_multiple_recipient(self):
+        email = EMAIL(
+            to=["first_person@gmail.com", "second_person@gmail.com"],
+            subject="test",
+            body="body",
+        )
+
+        assert isinstance(email.to, list)
+        assert len(email.to) == 2
+
+
+class TestEmailSenderInit:
+    def test_initialization_success(self, mock_yagmail):
+        with (
+            patch("app.Mailer.sender.email", "test_exemple@gmail.com"),
+            patch("app.Mailer.sender.app_password", "test_password"),
+        ):
+            sender = EmailSender(enable_loggin=False)
+            assert sender.email_user == email_personal
+            assert sender.email_app_password == app_password_personal
