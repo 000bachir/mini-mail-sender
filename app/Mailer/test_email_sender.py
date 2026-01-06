@@ -109,3 +109,25 @@ class TestEmailSenderInit:
             sender = EmailSender(enable_loggin=False)
             assert sender.email_user == email_personal
             assert sender.email_app_password == app_password_personal
+
+    def test_initialization_failure(self, mock_yagmail):
+        mock_yagmail.side_effect = Exception("Connection failed\n")
+        with (
+            patch("app.Mailer.sender.email", "test@exemple.com"),
+            patch("app.Mailer.sender.app_password", "test_password"),
+            pytest.raises(Exception),
+        ):
+            EmailSender(enable_loggin=False)
+
+
+class TestLoadEmailFromDatabase:
+    def test_load_email_from_database(self, email_sender):
+        mock_emails = [
+            {"to": "test1@example.com", "subject": "Test 1", "body": "Body 1"},
+            {"to": "test2@example.com", "subject": "Test 2", "body": "Body 2"},
+        ]
+        with patch("app.supabase.supabaseClient.DatabaseOperation") as mock_db:
+            mock_db.return_value.fetch_all_emails.return_value = mock_emails
+            result = email_sender.fetch_all_emails()
+            assert result == mock_emails
+            assert len(result)
