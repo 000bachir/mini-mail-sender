@@ -122,12 +122,15 @@ class TestEmailSenderInit:
 
 class TestLoadEmailFromDatabase:
     def test_load_email_from_database(self, email_sender):
-        mock_emails = [
-            {"to": "test1@example.com", "subject": "Test 1", "body": "Body 1"},
-            {"to": "test2@example.com", "subject": "Test 2", "body": "Body 2"},
-        ]
+        mock_emails = ["test1@example.com", "test2@example.com"]
         with patch("app.supabase.supabaseClient.DatabaseOperation") as mock_db:
             mock_db.return_value.fetch_all_emails.return_value = mock_emails
-            result = email_sender.fetch_all_emails()
-            assert result == mock_emails
+            result = email_sender.load_emails_from_database()
+            assert result[0] == "mobachir2@gmail.com"
             assert len(result)
+
+    def test_load_email_empty(self, email_sender):
+        with patch("app.supabase.supabaseClient.DatabaseOperation") as mock_db:
+            mock_db.return_value.fetch_all_emails.return_value = []
+            result = email_sender.load_emails_from_database()
+            assert result == []
