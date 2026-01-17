@@ -47,6 +47,7 @@ class EmailCategory:
     COMMUNICATION = "communication"
     SUPPORT = "support"
     OTHER = "other"
+    HOUSING = "housing"
 
 
 class EmailStatus(Enum):
@@ -291,9 +292,7 @@ class DatabaseOperation:
         try:
             email_request = self.client.table(self.table_name).select("email").execute()
             if not email_request.data:
-                self.logger.error(
-                    "failed to fetch all of the email from the database\n"
-                )
+                self.logger.warning("no email found in the database\n")
                 return []
             # transforming it into a list for ease of use :
             email_list = []
@@ -305,10 +304,8 @@ class DatabaseOperation:
             return email_list
 
         except Exception as e:
-            self.logger.error(
-                f"error operating the fetch request onto the database please check the error : {e}\n"
-            )
-            raise RuntimeError
+            self.logger.error(f"Database fetch failed : {e}\n")
+            raise RuntimeError(f"Failed to fetch all emails : {e}") from e
 
     def fetch_all_records(
         self, limit: Optional[int] = None, offset: int = 0

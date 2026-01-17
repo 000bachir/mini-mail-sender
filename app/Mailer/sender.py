@@ -117,10 +117,8 @@ class EmailSender:
                 return []
             return loading_email_from_supabse
         except Exception as e:
-            self.logger.error(
-                f"error during the operation of loading emails from the database : {e}"
-            )
-            raise RuntimeError
+            self.logger.error(f"Databse load failed : {e}\n")
+            raise RuntimeError(f"failed to load from the database {e}") from e
 
     def validate_email_structure(self, email: EMAIL) -> bool:
         try:

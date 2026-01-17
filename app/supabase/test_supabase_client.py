@@ -5,7 +5,6 @@ from unittest.mock import Mock, patch, MagicMock
 from typing import List
 from app.supabase.supabaseClient import (
     EmailRecord,
-    EmailCategory,
     EmailStatus,
     DatabaseOperation,
 )
