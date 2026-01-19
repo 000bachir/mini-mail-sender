@@ -138,6 +138,18 @@ class TestLoadEmailFromDatabase:
 
 class TestValidateEmailStructure:
     def test_validate_email_structure(self, email_sender, sample_email):
-        with patch("app.utils.normalize_recipients") as mock_normalize:
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
             mock_normalize.side_effect = lambda x: x
-            pass
+            result = email_sender.validate_email_structure(sample_email)
+            assert result is True
+
+    def test_validate_invalide_type(self, email_sender):
+        result = email_sender.validate_email_structure("not an a real email")
+        assert result is False
+
+    def test_validate_missing_field(self, email_sender):
+        email = EMAIL(to=None, subject="subject", body="what ever man i hate this life")
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
+            mock_normalize.return_value = None
+            result = email_sender.validate_email_structure(email)
+            assert result is False
