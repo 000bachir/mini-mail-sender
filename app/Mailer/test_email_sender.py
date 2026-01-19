@@ -1,3 +1,4 @@
+from re import sub
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
@@ -153,3 +154,105 @@ class TestValidateEmailStructure:
             mock_normalize.return_value = None
             result = email_sender.validate_email_structure(email)
             assert result is False
+
+    def test_validate_with_valid_attachement(
+        self, email_sender, sample_email_attachement
+    ):
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
+            mock_normalize.side_effect = lambda x: x
+            result = email_sender.validate_email_structure(sample_email_attachement)
+            assert result is True
+
+    def test_validate_with_missing_attachement(self, email_sender):
+        email = EMAIL(
+            to="exemple@gmail.com",
+            subject="subject",
+            body="body",
+            attachments=["/nonexiste/file.pdf"],
+        )
+
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
+            mock_normalize.side_effect = lambda x: x
+            result = email_sender.validate_email_structure(email)
+            assert result is False
+
+
+class TestSavingEmailsInQueue:
+    def test_save_emails_to_queue(self, email_sender):
+        """Test saving emails to queue"""
+        emails = ["email1", "email2", "email3"]
+        queue = email_sender.saving_emails_in_queue(emails)
+
+        assert isinstance(queue, Queue)
+        assert queue.qsize() == 3
+
+    def test_save_empty_list_to_queue(self, email_sender):
+        """Test saving empty list to queue"""
+        emails = []
+        queue = email_sender.saving_emails_in_queue(emails)
+
+        assert isinstance(queue, Queue)
+        assert queue.qsize() == 0
+
+
+# Test send_single_email
+class TestSendSingleEmail:
+    def test_send_email_success(self, email_sender, sample_email):
+        """Test successful email sending"""
+        with patch("app.Mailer.sender.EmailManager") as mock_manager:
+            mock_manager.return_value.valid_email_pattern.return_value = True
+
+            result = email_sender.send_single_email(sample_email)
+
+            assert result is True
+            assert sample_email.status == EmailStatus.SUCCESS
+            assert sample_email.priority == EmailPriority.NORMAL
+            assert sample_email.sent_at is not None
+
+    def test_send_email_validation_failure(self, email_sender, sample_email):
+        """Test email sending with validation failure"""
+        with patch("app.Mailer.sender.EmailManager") as mock_manager:
+            mock_manager.return_value.valid_email_pattern.return_value = False
+
+            result = email_sender.send_single_email(sample_email)
+
+            assert result is False
+            assert sample_email.status == EmailStatus.FAILED
+            assert sample_email.error_message == "validation failed"
+
+    def test_send_email_with_attachments(self, email_sender, sample_with_attachments):
+        """Test sending email with attachments"""
+        with patch("app.Mailer.sender.EmailManager") as mock_manager:
+            mock_manager.return_value.valid_email_pattern.return_value = True
+
+            result = email_sender.send_single_email(sample_email_attachement)
+
+            assert result is True
+            email_sender.yagmail.send.assert_called_once()
+
+    def test_send_email_exception(self, email_sender, sample_email):
+        """Test email sending with exception"""
+        with patch("app.Mailer.sender.EmailManager") as mock_manager:
+            mock_manager.return_value.valid_email_pattern.return_value = True
+            email_sender.yagmail.send.side_effect = Exception("SMTP Error")
+
+            with pytest.raises(RuntimeError):
+                email_sender.send_single_email(sample_email)
+
+            assert sample_email.status == EmailStatus.FAILED
+            assert "SMTP Error" in sample_email.error_message
+
+
+# Test Enums
+class TestEnums:
+    def test_email_status_values(self):
+        """Test EmailStatus enum values"""
+        assert EmailStatus.PENDING.value == "pending"
+        assert EmailStatus.SENT.value == "sent"
+        assert EmailStatus.FAILED.value == "failed"
+
+    def test_email_priority_values(self):
+        """Test EmailPriority enum values"""
+        assert EmailPriority.LOW.value == "low"
+        assert EmailPriority.NORMAL.value == "normal"
+        assert EmailPriority.HIGH.value == "high"
