@@ -132,7 +132,9 @@ class EmailSender:
             email_subject = normalize_recipients(email.subject)
             email_body = normalize_recipients(email.body)
             if not email_to or not email_subject or not email_body:
-                self.logger.warning(f"missing required field form the {email.email_id}")
+                self.logger.warning(
+                    f"missing required field form the {email.email_id}\n"
+                )
                 return False
 
             if email.attachments:
@@ -168,29 +170,30 @@ class EmailSender:
 
     def send_single_email(self, email: EMAIL):
         email_manager = EmailManager()
-        try:
-            if not email_manager.valid_email_pattern(email):
-                self.logger.error("error the email provided is not acceptable\n")
+        while email.retry_count < email.max_retries:
+            try:
+                if not email_manager.valid_email_pattern(email):
+                    self.logger.error("error the email provided is not acceptable\n")
+                    email.status = EmailStatus.FAILED
+                    email.error_message = "validation failed"
+                    return False
+                else:
+                    self.logger.info("---------sending process is starting---------")
+                attachement = email.attachments if email.attachments else None
+                self.yagmail.send(
+                    to=email.to,
+                    subject=email.subject,
+                    contents=email.body,
+                    attachments=attachement,
+                    cc=email.cc,
+                    bcc=email.bcc,
+                )
+                email.status = EmailStatus.SUCCESS
+                email.priority = EmailPriority.NORMAL
+                email.sent_at = datetime.now()
+                return True
+            except Exception as e:
+                self.logger.error("error could not send email properly\n")
+                email.error_message = str(e)
                 email.status = EmailStatus.FAILED
-                email.error_message = "validation failed"
-                return False
-            else:
-                self.logger.info("---------sending process is starting---------")
-            attachement = email.attachments if email.attachments else None
-            self.yagmail.send(
-                to=email.to,
-                subject=email.subject,
-                contents=email.body,
-                attachments=attachement,
-                cc=email.cc,
-                bcc=email.bcc,
-            )
-            email.status = EmailStatus.SUCCESS
-            email.priority = EmailPriority.NORMAL
-            email.sent_at = datetime.now()
-            return True
-        except Exception as e:
-            self.logger.error("error could not send email properly\n")
-            email.error_message = str(e)
-            email.status = EmailStatus.FAILED
-            raise RuntimeError
+                raise RuntimeError
