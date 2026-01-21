@@ -220,7 +220,7 @@ class TestSendSingleEmail:
             assert sample_email.status == EmailStatus.FAILED
             assert sample_email.error_message == "validation failed"
 
-    def test_send_email_with_attachments(self, email_sender, sample_with_attachments):
+    def test_send_email_with_attachments(self, email_sender, sample_email_attachement):
         """Test sending email with attachments"""
         with patch("app.Mailer.sender.EmailManager") as mock_manager:
             mock_manager.return_value.valid_email_pattern.return_value = True
