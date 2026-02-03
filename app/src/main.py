@@ -1,75 +1,58 @@
 from __future__ import annotations
-import time as time_module
-from typing import List
+import sys
+import signal
+import argparse
+import logging
+from datetime import datetime, timedelta
+from pathlib import Path
+from queue import Queue
+from time import strftime
 
-
-# TODO : instead of using asyncio i could uvloop it faster and handle connections better
+# class imports
+from app.Mailer.sender import EmailSender
 from app.scheduler.scheduler import EmailScheduler
-from app.Mailer.sender import EMAIL, EmailSender, EmailStatus
+from app.supabase.supabaseClient import DatabaseOperation
 
 
-def main():
-    print("test mail worker init\n")
+class EmailCampainManager:
+    def __init__(
+        self,
+        enable_logging: bool = True,
+        dry_run: bool = False,
+        resume_from_failure: bool = True,
+    ):
+        self.dry_run = dry_run
+        self.resume_from_failure = resume_from_failure
 
-    email_scheduler = EmailScheduler()
-    email_sender = EmailSender()
-
-    # startup_delay = email_scheduler.add_random_delay_after_init()
-    # print(f"fire up delay : {startup_delay}\n")
-    # time_module.sleep(startup_delay.total_seconds())
-    #
-    while True:
-        now = email_scheduler.get_current_time()
-        print(f"the current time is : {now.strftime('%H:%M:%S')}")
-
-        if not email_scheduler.checking_buisness_hours(now):
-            return
-        # load the emails :
-        raw_emails = email_sender.load_emails_from_database()
-        print(type(raw_emails), raw_emails[:3])
-
-        if not raw_emails:
-            return False
-        # emails = [EMAIL.from_dict(email) for email in raw_emails]
-        emails: list[EMAIL] = []
-        for row in raw_emails:
-            emails.append(
-                EMAIL(
-                    to=row,
-                    subject="my subject",
-                    body="my body",
-                )
+        if enable_logging:
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                handlers=[
+                    logging.FileHandler(
+                        f"email campain {datetime.now().strftime('%Y/%m/%d_%H:%M:S')}.log"
+                    ),
+                    logging.StreamHandler(),
+                ],
             )
-        queue_line = email_sender.saving_emails_in_queue(raw_emails)
-        while not queue_line.empty():
-            email = queue_line.get()
-            allowed, msg = email_scheduler.check_hourly_email_rate_limit()
-            if not allowed:
-                print(msg)
-                break
+        self.logger = logging.getLogger(__name__)
+        # main component init
+        self.database = DatabaseOperation()
+        self.sender = EmailSender()
+        self.Scheduler = EmailScheduler()
 
-            allowed_daily, message = email_scheduler.check_daily_email_rate_limit()
-            if not allowed_daily:
-                print(message)
-                break
-            if not email_sender.validate_email_structure(email):
-                email.status = EmailStatus.FAILED
-                continue
-            try:
-                print("sending to someone")
-                success = email_sender.send_single_email(email)
-                if success:
-                    email_scheduler.email_sent_during_an_hour += 1
-                    email_scheduler.email_sent_during_a_day += 1
-                    print(
-                        f"✓ Sent successfully ({email_scheduler.email_sent_during_an_hour}/hour)"
-                    )
-                else:
-                    print("✗ Send failed (validation)")
-            except Exception as e:
-                print("error", e)
-                raise
+        self.metric = {
+            "start_time": None,
+            "end_time": None,
+            "total_sent": 0,
+            "failed": 0,
+            "skipped": 0,
+            "sent": 0,
+        }
 
+        # graceful shutdown
+        self.shutdown_request = False
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
 
-if __name__ == "__main__":
-    main()
+        self.logger.info("EMAIL CAMPAIGN INITIALIZED!!!!!")
