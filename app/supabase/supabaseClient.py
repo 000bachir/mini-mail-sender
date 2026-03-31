@@ -5,9 +5,7 @@ supabase integration
 from __future__ import annotations
 from dataclasses import asdict
 import datetime
-from os import stat
 import re
-from annotated_types import LowerCase
 from postgrest import CountMethod
 from realtime import dataclass
 from supabase import Client, create_client
@@ -98,12 +96,6 @@ class DatabaseOperation:
             self.logger.info("health check passed correctly\n")
             return True
         except Exception as e:
-            # self.client.table("healthcheck").insert(
-            #     {
-            #         "status": "failed to check the database health",
-            #         "timestamp": timestamp,
-            #     }
-            # ).execute()
             self.logger.error(f"could not chekc the database health cause : {e}\n")
             return False
 

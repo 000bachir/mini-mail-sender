@@ -1,171 +1,267 @@
 from __future__ import annotations
-import sys
-import signal
-import argparse
+import datetime
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
-from queue import Queue
-from time import strftime
+import sys
+from typing import List
+
 
 # class imports
 from app.Mailer.sender import EMAIL, EmailPriority, EmailSender, EmailStatus
 from app.scheduler.scheduler import EmailScheduler
 from app.supabase.supabaseClient import DatabaseOperation, EmailRecord
 
+"""
+LOGGIN SETUP
+"""
 
-class EmailCampainManager:
-    def __init__(
-        self,
-        enable_logging: bool = True,
-        dry_run: bool = False,
-        resume_from_failure: bool = True,
-    ):
-        self.dry_run = dry_run
-        self.resume_from_failure = resume_from_failure
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-        if enable_logging:
-            logging.basicConfig(
-                level=logging.INFO,
-                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                handlers=[
-                    logging.FileHandler(
-                        f"email campain {datetime.now().strftime('%Y/%m/%d_%H:%M:S')}.log"
-                    ),
-                    logging.StreamHandler(),
-                ],
+
+# health check
+def check_health() -> DatabaseOperation | None:
+    logger.info("=" * 60)
+    logger.info("step 1 : checking database health")
+    logger.info("=" * 60)
+    try:
+        database = DatabaseOperation()
+        health = database.check_health()
+        if not health:
+            logger.error("Database health check failed - aborting the pipeline\n")
+            return None
+        latest = database.get_latest_health_status()
+        if latest:
+            logger.info(f"latest database health status : {latest}")
+
+        rows = database.count_rows_in_database()
+        if rows is not None:
+            if len(rows) > 0:
+                logger.info(f"the number of rows are {rows}")
+            else:
+                logger.warning("NO ROWS HAVE BEEN FOUND")
+                return None
+        return database
+    except Exception as e:
+        logger.error(f"error checking the health of the database : {e}")
+        raise
+
+
+def run_scheduler_check() -> EmailScheduler | None:
+    logger.info("=" * 60)
+    logger.info("step two : scheduer readiness check")
+    logger.info("=" * 60)
+    try:
+        scheduler = EmailScheduler()
+        # checking buisness hours :
+        is_buisness_hours = scheduler.checking_buisness_hours()
+        if is_buisness_hours:
+            logger.info(f"Inside of buisness hours : {is_buisness_hours}")
+        else:
+            logger.warning(
+                "Outside business hours — emails will be queued but not sent in production. "
+                "Continuing in test mode anyway.\n"
             )
-        self.logger = logging.getLogger(__name__)
-        # main component init
-        self.database = DatabaseOperation()
-        self.sender = EmailSender()
-        self.Scheduler = EmailScheduler()
+        hourly_ok, hourly_msg = scheduler.check_hourly_email_rate_limit()
+        daily_ok, daily_msg = scheduler.check_daily_email_rate_limit()
 
-        self.metric = {
-            "start_time": None,
-            "end_time": None,
-            "total_sent": 0,
-            "failed": 0,
-            "skipped": 0,
-            "sent": 0,
-        }
+        logger.info(f"hourly rate limit Ok {hourly_ok} | {hourly_msg.strip()}")
+        logger.info(f"hourly rate limit Ok {daily_ok} | {daily_msg.strip()}")
+        # the waiting delay :
+        # delay = scheduler.add_random_delay_after_init()
+        # logger.info(f"the program have to wait {delay} before firing up")
+        return scheduler
+    except Exception as e:
+        logger.error(f"Scheduler initalisation failed see cause : {e}")
+        return None
 
-        # graceful shutdown
-        self.shutdown_request = False
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        self.logger.info("EMAIL CAMPAIGN INITIALIZED!!!!!")
 
-    def signal_handler(self, signum, fname):
-        self.logger.warning(f"\nReceived signal {signum} , starting graceful shutdown")
-        self.shutdown_request = True
+# load recipents from database
+def load_recipients(database: DatabaseOperation) -> List[str]:
+    logger.info("=" * 60)
+    logger.info("step three : loading emails")
+    logger.info("=" * 60)
+    try:
+        recipients = database.fetch_all_emails()
+        if len(recipients) == 0:
+            logger.error("No recipents found in the database")
+            return []
+        logger.info(f"Loaded {len(recipients)} recipient(s): {recipients}\n")
+        return recipients
+    except Exception as e:
+        logger.error(f"ERROR : failed to load the recipients : {e}")
+        return []
 
-    def helth_check_the_database(self) -> bool:
-        self.logger.info("Performing a health check test")
-        if not self.database.check_health():
-            self.logger.error("ERROR : the database health check failed")
-            return False
-        if not self.Scheduler.checking_buisness_hours():
-            self.logger.error("outside buisness hours all emails will be delayed\n")
-            return False
-        self.logger.info("ALL health check passed")
-        return True
 
-    def load_email_from_database(self):
-        self.logger.info("loading emails from databese\n")
-        pending_email = self.database.fetch_email_by_status(EmailStatus.PENDING.value)
-        if self.resume_from_failure:
-            failed_record = self.database.fetch_email_by_status(
-                EmailStatus.FAILED.value
-            )
-            pending_email.extend(failed_record)
-            self.logger.info(f"loaded {len(failed_record)} failed emails to retry ")
+# building the email object :
+def building_email_object(recipients: list[str]) -> list[EMAIL]:
+    logger.info("=" * 60)
+    logger.info("step three : loading emails")
+    logger.info("=" * 60)
 
-    def convert_record_to_emails(self, record: EmailRecord) -> EMAIL:
-        return EMAIL(
-            to=record.email,
-            subject=f"application for {record.category} position",
-            body=self._generate_body_email(record),
-            attachments=["../assets/global english.pdf"],
+    emails: list[EMAIL] = []
+    for recipent in recipients:
+        email_object = EMAIL(
+            to=recipent,
+            subject="test email forwarder",
+            body=(
+                "Hello,\n\n"
+                "This is an automated integration test from the mail forwarder pipeline.\n"
+                "If you received this, all three components (DB / Scheduler / Mailer) "
+                "are communicating correctly.\n\n"
+                "Best regards."
+            ),
             priority=EmailPriority.NORMAL,
             status=EmailStatus.PENDING,
-            email_id=record.email,
+            created_at=datetime.datetime.now().isoformat(),
         )
+        emails.append(email_object)
+        logger.info(f"Built email object for {recipent}")
+    logger.info(f"\n total emails built : {len(emails)} \n")
+    return emails
 
-    def _generate_body_email(self, record: EmailRecord) -> str:
-        """Generate personalized email body based on recipient data"""
-        # Customize this based on your needs
-        greeting = (
-            f"Dear {record.full_name}" if record.full_name else "Dear Hiring Manager"
-        )
-        body = f"""
-        {greeting},
-        I hope this email finds you well. I am writing to express my interest in opportunities 
-        within your {record.category} department.
 
-        [Your personalized message here based on category: {record.category}]
+# queue and validate :
+def queue_and_validate(sender: EmailSender, emails: list[EMAIL]):
+    logger.info("=" * 60)
+    logger.info("step three : queue and validate")
+    logger.info("=" * 60)
+    queue = sender.saving_emails_in_queue(emails)
+    logger.info(f"queue size {queue.qsize()}")
 
-        Please find my resume attached for your review.
+    valid_emails: list[EMAIL] = []
+    invalid_emails: list[EMAIL] = []
 
-        Best regards,
-        [Your Name]
-                """
-        return body.strip()
+    temporary_list = list(queue.queue)
+    for email_obj in temporary_list:
+        is_valid = sender.validate_email_structure(email_obj)
+        if is_valid:
+            valid_emails.append(email_obj)
+        else:
+            invalid_emails.append(email_obj)
 
-    def process_email_in_queue(self, email_queue: Queue) -> None:
-        self.metric["start_time"] = datetime.now()
-        self.metric["total_emails"] = email_queue.qsize()
-        self.logger.info(f"starting to process {self.metric['total_emails']} emails\n")
-        if not self.Scheduler.checking_buisness_hours():
-            delay = self.Scheduler.add_random_delay_after_init()
-            self.logger.info(
-                f"adding random delay {delay} (outside of buisness hours) "
-            )
-            if not self.dry_run:
-                import time
+    logger.info(f"Valid : {len(valid_emails)}")
+    logger.info(f"Invalid emails : {len(invalid_emails)}")
+    return valid_emails, invalid_emails
 
-                time.sleep(delay.total_seconds())
-        while not email_queue.empty() and not self.shutdown_request:
-            hourly_ok, hourly_msg = self.Scheduler.check_hourly_email_rate_limit()
-            daily_ok, daily_msg = self.Scheduler.check_daily_email_rate_limit()
-            if not hourly_ok:
-                self.logger.warning(hourly_msg)
-                self.logger.info("hourly limit reached waiting 1 hour")
-                if not self.dry_run:
-                    import time
 
-                    time.sleep(3600)
-                continue
-            if not daily_ok:
-                self.logger.warning(daily_msg)
-                self.logger.info("daily email limit reached program will stop ")
-                break
-            email = email_queue.get()
-            try:
-                if not self.sender.validate_email_structure(email):
-                    self.logger.error(f"invalid email structure for {email.email.id}")
-                    self.metric["skipped"] = +1
-                    self._upadate_database_status(
-                        email.email_id, EmailStatus.FAILED, "invalid structure"
-                    )
-                    continue
+# sending the mail :
+def send_mails(
+    sender: EmailSender,
+    scheduler: EmailScheduler,
+    valid_emails: list[EMAIL],
+    database: DatabaseOperation,
+    dry_run,
+):
+    logger.info("=" * 60)
+    logger.info("step three : queue and validate")
+    logger.info("=" * 60)
 
-                if self.dry_run:
-                    self.logger.info(f"email sent to {email.to}")
-                    success = True
-                else:
-                    success = self.sender.send_single_email(email)
+    sent_count: int = 0
+    failed_count: int = 0
+    for email_obj in valid_emails:
+        # first guard : the hours :
+        hourly_ok, hourly_msg = scheduler.check_hourly_email_rate_limit()
+        if not hourly_ok:
+            logger.warning(f"Hourly limit hit - stopping the program {hourly_msg}")
+            break
+        # second guard the daily quota
+        daily_ok, daily_msg = scheduler.check_daily_email_rate_limit()
+        if not daily_ok:
+            logger.warning(f"Daily limit hit - exiting the program : {daily_msg}")
+            break
+        if dry_run:
+            logger.info(f"dry run : would send to {email_obj.to}")
+            email_obj.status = EmailStatus.SUCCESS
+            email_obj.sent_at = datetime.datetime.now().strftime("%H:%M:%S")
+            sent_count += 1
 
-                if success:
-                    self.metric["sent"] += 1
-                    self.Scheduler.email_sent_during_an_hour += 1
-                    self.Scheduler.email_sent_during_a_day += 1
-                    self._upadate_database_status(email.email.id, EmailStatus.SENT)
-                    self.logger.info(
-                        f"email sent to {email.to} ({self.metric['sent']} / {self.metric['total_emails']}) "
-                    )
-                else:
-                    self.metric["failed"] += 1
+            database.update_email_status(email_obj.to, EmailStatus.SUCCESS.value)
+            scheduler.email_sent_during_a_day += 1
+            scheduler.email_sent_during_an_hour += 1
+        else:
+            success = sender.send_single_email(email_obj)
+            if success:
+                sent_count += 1
+                scheduler.email_sent_during_an_hour += 1
+                scheduler.email_sent_during_a_day += 1
+                database.update_email_status(email_obj.to, EmailStatus.SUCCESS.value)
+            else:
+                failed_count += 1
+                database.update_email_status(email_obj.to, EmailStatus.FAILED.value)
+            if len(valid_emails) > 1:
+                scheduler.random_email_interval_between_delivery()
+    logger.info(f"\n sent : {sent_count} | failed : {failed_count} \n")
+    return sent_count, failed_count
 
-            except Exception as e:
-                print(f"error {e}")
+
+def print_summary(
+    total_recipients: int,
+    total_valid: int,
+    total_invalid: int,
+    sent: int,
+    failed: int,
+):
+    logger.info("=" * 60)
+    logger.info("PIPELINE SUMMARY")
+    logger.info("=" * 60)
+    logger.info(f"  Recipients loaded : {total_recipients}")
+    logger.info(f"  Valid emails      : {total_valid}")
+    logger.info(f"  Invalid emails    : {total_invalid}")
+    logger.info(f"  Sent              : {sent}")
+    logger.info(f"  Failed            : {failed}")
+    logger.info("=" * 60 + "\n")
+
+
+# main entry point
+def main(dry_run: bool = True):
+    logger.info("MAIL forwarder - stress testing")
+    # database :
+    db = check_health()
+    if db is None:
+        logger.critical("Cannot proceede without health check of the database")
+        sys.exit(1)
+
+    scheduler = run_scheduler_check()
+    if scheduler is None:
+        logger.critical("No working scheduler - terminating")
+        sys.exit(1)
+
+    recipients = load_recipients(db)
+    if not recipients:
+        logger.warning("No recipients to process - exiting")
+        sys.exit(1)
+
+    Emails = building_email_object(recipients)
+
+    try:
+        sender = EmailSender()
+    except Exception as e:
+        logger.critical(f"sender could not be initialized : {e}\n")
+        sys.exit(1)
+    valid_emails, invalid_emails = queue_and_validate(sender, Emails)
+    if not valid_emails:
+        logger.warning("No valid email have been found")
+        sys.exit(0)
+
+    sent, failed = send_mails(
+        sender=sender,
+        scheduler=scheduler,
+        valid_emails=valid_emails,
+        database=db,
+        dry_run=dry_run,
+    )
+    # Summary
+    print_summary(
+        total_recipients=len(recipients),
+        total_valid=len(valid_emails),
+        total_invalid=len(invalid_emails),
+        sent=sent,
+        failed=failed,
+    )
+
+
+if __name__ == "__main__":
+    main(dry_run=False)

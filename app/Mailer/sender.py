@@ -3,6 +3,7 @@ import datetime
 from datetime import datetime
 import logging
 from pathlib import Path
+from re import sub
 from configuration.config import loading_env_variables
 import yagmail
 from typing import Any, Dict, Optional, List, Union
@@ -58,7 +59,7 @@ class EMAIL:
     scheduled_for: Optional[str] = None
     sent_at: Optional[Union[str, datetime]] = None
     retry_count: int = 0
-    max_retries: int = 3
+    max_retries: int = 4
     error_message: Optional[str] = None
     email_id: Optional[str] = None
 
@@ -122,21 +123,19 @@ class EmailSender:
 
     def validate_email_structure(self, email: EMAIL) -> bool:
         try:
-            # Pyright:igonre
             if not isinstance(email, EMAIL):
-                self.logger.warning(
-                    f"error the validate structure funcition received {type(email)}"
-                )
                 return False
             email_to = normalize_recipients(email.to)
-            email_subject = normalize_recipients(email.subject)
-            email_body = normalize_recipients(email.body)
-            if not email_to or not email_subject or not email_body:
-                self.logger.warning(
-                    f"missing required field form the {email.email_id}\n"
-                )
+            if not email_to:
+                self.logger.warning(f"missing the 'to' field on {email.email_id}\n ")
+                return False
+            if not email.subject or not email.subject.strip():
+                self.logger.warning(f"missing the 'subject' in {email.email_id}\n")
                 return False
 
+            if not email.body or not email.body.strip():
+                self.logger.warning(f"missing 'body' field {email.email_id}\n")
+                return False
             if email.attachments:
                 for attachement in email.attachments:
                     if not Path(attachement).exists():
@@ -170,30 +169,39 @@ class EmailSender:
 
     def send_single_email(self, email: EMAIL):
         email_manager = EmailManager()
+        if not email_manager.valid_email_pattern(email.to):
+            self.logger.error(f"invalid email address : {email.to}\n")
+            email.status = EmailStatus.FAILED
+            email.error_message = "validation error"
+            return False
+        self.logger.info(
+            f"starting to send to {email.to} - max retries : {email.max_retries}\n"
+        )
         while email.retry_count < email.max_retries:
             try:
-                if not email_manager.valid_email_pattern(email):
-                    self.logger.error("error the email provided is not acceptable\n")
-                    email.status = EmailStatus.FAILED
-                    email.error_message = "validation failed"
-                    return False
-                else:
-                    self.logger.info("---------sending process is starting---------")
                 attachement = email.attachments if email.attachments else None
                 self.yagmail.send(
                     to=email.to,
                     subject=email.subject,
                     contents=email.body,
-                    attachments=attachement,
+                    attachement=email.attachments,
                     cc=email.cc,
                     bcc=email.bcc,
                 )
                 email.status = EmailStatus.SUCCESS
                 email.priority = EmailPriority.NORMAL
-                email.sent_at = datetime.now()
-                return True
+                email.sent_at = datetime.now().strftime("%Y-%M-%D %H:%M:%S")
+                self.logger.info(f"email sent to {email.to}")
             except Exception as e:
-                self.logger.error("error could not send email properly\n")
+                email.retry_count += 1
+                email.status = EmailStatus.RETRYING
                 email.error_message = str(e)
-                email.status = EmailStatus.FAILED
-                raise RuntimeError
+                self.logger.warning(
+                    f"attempt {email.retry_count}/{email.max_retries} failed for {email.to}: {e}\n"
+                )
+            email.status = EmailStatus.FAILED
+            self.logger.error(
+                f"all {email.max_retries} attemps have been exhausted for  {email.to}\n"
+            )
+
+            return False

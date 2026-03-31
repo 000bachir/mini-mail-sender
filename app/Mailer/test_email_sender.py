@@ -122,23 +122,23 @@ class TestEmailSenderInit:
 
 
 class TestLoadEmailFromDatabase:
-    # def test_load_email_from_database(self, email_sender):
-    #     mock_emails = ["test1@example.com", "test2@example.com"]
-    #     with patch("app.supabase.supabaseClient.DatabaseOperation") as mock_db:
-    #         mock_db.return_value.fetch_all_emails.return_value = mock_emails
-    #         result = email_sender.load_emails_from_database()
-    #         assert result[0] == "mobachir2@gmail.com"
-    #         assert len(result)
-    #
+    def test_load_email_from_database(self, email_sender):
+        mock_emails = ["test1@example.com", "test2@example.com"]
+        with patch("app.Mailer.sender") as mock_db:
+            mock_db.return_value.fetch_all_emails.return_value = mock_emails
+            result = email_sender.load_emails_from_database()
+            assert result[0] == "test1@example.com"
+            assert len(result)
+
     def test_load_email_empty(self, email_sender):
-        with patch("app.supabase.supabaseClient.DatabaseOperation") as mock_db:
+        with patch("app.Mailer.sender.DatabaseOperation") as mock_db:
             mock_db.return_value.fetch_all_emails.return_value = []
             result = email_sender.load_emails_from_database()
             assert result == []
 
 
 class TestValidateEmailStructure:
-    def test_validate_email_structure(self, email_sender, sample_email):
+    def test_validate_email_structure(self, email_sender, sample_email: EMAIL):
         with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
             mock_normalize.side_effect = lambda x: x
             result = email_sender.validate_email_structure(sample_email)

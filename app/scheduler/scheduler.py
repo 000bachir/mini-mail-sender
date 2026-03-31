@@ -1,3 +1,4 @@
+from os import wait
 import time as time_module
 import random
 import datetime
@@ -23,14 +24,14 @@ class EmailScheduler:
     def __init__(
         self,
         # rule of thumb use "time" when for comparing or checking the time and timedelta for operation like adding
-        buisness_hours_starting=time(9, 0),
-        buisness_hours_ending=time(17, 0),
-        daily_batch_emails=100,
-        variation=random.randint(-10, 25),
-        # max_email_a_day=70,
-        max_email_an_hour=30,
-        enable_loggin_info: bool = True,
+        buisness_hours_start: time = time(9, 0),
+        buisness_hours_end: time = time(17, 0),
+        daily_batch_emails: int = 100,
+        max_email_a_day=70,
+        max_emails_an_hour=30,
+        enable_loggin: bool = True,
     ):
+        variation = random.randint(-10, 25)
         # when the program will fire it will a time interval until it starts sending depending on the time
         self.morning_intervals = [
             timedelta(hours=0, minutes=10, seconds=20),
@@ -49,16 +50,11 @@ class EmailScheduler:
         self.noon_interval = timedelta(hours=1, minutes=10, seconds=45)
 
         # buisness hours set up
+        self.buisness_hours_starting = buisness_hours_start
+        self.buisness_hours_ending = buisness_hours_end
 
-        self.buisness_hours_starting = buisness_hours_starting
-        self.buisness_hours_ending = buisness_hours_ending
-
-        # rate limit of sending emails
-        self.max_email_an_hour = max_email_an_hour
-        self.max_email_a_day = daily_batch_emails + variation
-
-        # emails quotas a day and an hour
-        self.max_email_an_hour = max_email_an_hour
+        # rate limits - single assignement each
+        self.max_email_an_hour = max_emails_an_hour
         self.max_email_a_day = daily_batch_emails + variation
 
         # tracking metricks
@@ -71,23 +67,44 @@ class EmailScheduler:
             hour=0, minute=0, second=0, microsecond=0
         )
 
-        if enable_loggin_info:
+        if enable_loggin:
             logging.basicConfig(
                 level=logging.INFO,
                 format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             )
-        self.logger = logging.getLogger(__name__)
-        # enable loggins
-        self.logger.info("Email scheduler class is being initiated\n")
+            self.logger = logging.getLogger(__name__)
+            self.logger.info("Email scheduler class is being initiated\n")
+        else:
+            self.logger.disabled = True
+
+        self.logger.info("Email scheduler initialised successfully\n")
 
     def get_current_time(self) -> datetime:
         try:
             return datetime.now()
         except Exception as e:
-            self.logger.error(
-                f"the get_current_time method crashed please check error : {e}\n"
-            )
+            self.logger.error(f"the get_current_time crashed : {e}\n")
             raise
+
+    def _reset_daily_counter_if_needed(self):
+        now = self.get_current_time()
+        if now.date() > self.current_day_start.date():
+            self.logger.info(
+                f"Daily counter reset - was {self.email_sent_during_a_day}\n"
+            )
+            self.email_sent_during_a_day = 0
+            self.current_day_start = now.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+    def _reset_hourly_counter_if_needed(self):
+        now = self.get_current_time()
+        if (now - self.current_hour_start).seconds >= 3600:
+            self.logger.info(
+                f"Hourly counter reset - was {self.email_sent_during_an_hour}\n"
+            )
+            self.email_sent_during_an_hour = 0
+            self.current_hour_start = now.replace(minute=0, second=0, microsecond=0)
 
     def checking_buisness_hours(self, check_time: Optional[datetime] = None) -> bool:
         if check_time is None:
@@ -136,9 +153,14 @@ class EmailScheduler:
     ):
         wait_time = random.randint(min_seconds, max_seconds)
         self.logger.warning(
-            f"to not being flagged by robots we need to simulate some type of sleep between each email sent {wait_time}\n"
+            f"to not being flagged by robots we need to simulate some type of sleep between each email sent {wait_time}s\n"
         )
-        time_module.sleep(wait_time)
+        while wait_time > 0:
+            self.logger.info(f"\r{wait_time}s remaining ")
+            time_module.sleep(1)
+            wait_time -= 1
+
+        print("\rDone")
 
     def check_hourly_email_rate_limit(self) -> tuple[bool, str]:
         try:
@@ -179,3 +201,10 @@ class EmailScheduler:
                 f"the function check_hourly_email_rate_limit has crashed see error : {e}\n"
             )
             raise
+
+    def increment_counters(self):
+        self.email_sent_during_a_day += 1
+        self.email_sent_during_an_hour += 1
+        self.logger.info(f"""Counters updated — hour:
+        {self.email_sent_during_an_hour}/{self.max_email_an_hour} ' f'|
+        day: {self.email_sent_during_a_day}/{self.max_email_a_day}\n""")

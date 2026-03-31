@@ -1,5 +1,6 @@
-def normalize_recipients(*value):
+def normalize_recipients(value) -> list:
     if isinstance(value, str):
         return [value]
-    else:
-        return value or []
+    elif isinstance(value, list):
+        return value
+    return []
