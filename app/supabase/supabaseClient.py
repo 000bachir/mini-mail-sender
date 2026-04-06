@@ -128,15 +128,21 @@ class DatabaseOperation:
     # VALIDATION METHODS
     # ============================================================================
     def valid_email_pattern(self, email: str) -> bool:
-        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if re.fullmatch(pattern, email):
-            self.logger.info("the email provided is valid")
-            return True
-        else:
+        if not email or not isinstance(email, str):
             self.logger.warning(
-                f"the email provided doesn't have a valid structure : {email}"
+                "email validation received a non-string or empty value\n"
             )
             return False
+
+        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if re.fullmatch(
+            pattern, email.strip()
+        ):  # .strip() handles accidental whitespace
+            self.logger.info(f"valid email: {email}\n")
+            return True
+
+        self.logger.warning(f"invalid email structure: {email}\n")
+        return False
 
     def checking_for_dupalicates(self, email: str) -> bool:
         try:

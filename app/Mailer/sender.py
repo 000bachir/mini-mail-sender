@@ -6,7 +6,7 @@ from pathlib import Path
 from re import sub
 from configuration.config import loading_env_variables
 import yagmail
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, Never, Optional, List, Union
 from enum import Enum
 from dataclasses import asdict, dataclass
 from app.supabase.supabaseClient import DatabaseOperation
@@ -50,7 +50,6 @@ class EMAIL:
     to: Optional[Union[str, List[str]]]
     subject: str
     body: str
-    attachments: Optional[List[str]] = None
     cc: Optional[Union[str, List[str]]] = None
     bcc: Optional[Union[str, List[str]]] = None
     priority: EmailPriority = EmailPriority.NORMAL
@@ -62,6 +61,7 @@ class EMAIL:
     max_retries: int = 4
     error_message: Optional[str] = None
     email_id: Optional[str] = None
+    attachments: Optional[str] = None
 
     def to_dict(self) -> Dict:
         # convert for dict for json serialization
@@ -167,31 +167,45 @@ class EmailSender:
             )
             raise RuntimeError
 
-    def send_single_email(self, email: EMAIL):
-        email_manager = EmailManager()
-        if not email_manager.valid_email_pattern(email.to):
-            self.logger.error(f"invalid email address : {email.to}\n")
+    def send_single_email(self, email: EMAIL) -> bool:
+        # normalize first so email.to can be str or List[str]
+        recipient_list = normalize_recipients(email.to)
+
+        if not recipient_list:
+            self.logger.error("no recipient provided\n")
             email.status = EmailStatus.FAILED
-            email.error_message = "validation error"
+            email.error_message = "no recipient"
             return False
+
+        # validate each address once
+        email_manager = EmailManager()
+        # for r in recipient_list:
+        # if not email_manager.valid_email_pattern(r):
+        #     self.logger.error(f"invalid email address: {r}\n")
+        #     email.status = EmailStatus.FAILED
+        #     email.error_message = f"invalid address: {r}"
+        #     return False
+        #
         self.logger.info(
-            f"starting to send to {email.to} - max retries : {email.max_retries}\n"
+            f"starting send to {email.to} — max retries: {email.max_retries}\n"
         )
+
         while email.retry_count < email.max_retries:
             try:
-                attachement = email.attachments if email.attachments else None
                 self.yagmail.send(
                     to=email.to,
                     subject=email.subject,
                     contents=email.body,
-                    attachement=email.attachments,
+                    attachments=email.attachments if email.attachments else None,
                     cc=email.cc,
                     bcc=email.bcc,
                 )
                 email.status = EmailStatus.SUCCESS
                 email.priority = EmailPriority.NORMAL
-                email.sent_at = datetime.now().strftime("%Y-%M-%D %H:%M:%S")
-                self.logger.info(f"email sent to {email.to}")
+                email.sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.logger.info(f"email sent successfully to {email.to}\n")
+                return True
+
             except Exception as e:
                 email.retry_count += 1
                 email.status = EmailStatus.RETRYING
@@ -199,9 +213,9 @@ class EmailSender:
                 self.logger.warning(
                     f"attempt {email.retry_count}/{email.max_retries} failed for {email.to}: {e}\n"
                 )
-            email.status = EmailStatus.FAILED
-            self.logger.error(
-                f"all {email.max_retries} attemps have been exhausted for  {email.to}\n"
-            )
 
-            return False
+        email.status = EmailStatus.FAILED
+        self.logger.error(
+            f"all {email.max_retries} attempts exhausted for {email.to}\n"
+        )
+        return False
