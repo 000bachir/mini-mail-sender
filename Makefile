@@ -3,7 +3,7 @@ server :
 run : 
 	cd . && python -m  app.src.main
 flet : 
-	cd . && flet -m run app.src.main
+	flet run app.src.main
 run_test : 
 	cd . && python -m pytest app/src/test_main.py
 # test commands 
