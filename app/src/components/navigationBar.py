@@ -1,6 +1,15 @@
-from fastapi.routing import request_response
-import flet as fl
+import flet as ft
 
 
-def navigationBar(label, value):
-    return fl.Container(content=fl.Column([fl.Text(label), fl.Text(value)]))
+class SideBar(ft.Container):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.content = ft.Column(
+            controls=[
+                ft.Text("sidebar"),
+                ft.ElevatedButton("home"),
+                ft.ElevatedButton("settings"),
+            ]
+        )
+

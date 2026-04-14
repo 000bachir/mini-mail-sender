@@ -1,7 +1,7 @@
+from __future__ import annotations
 import flet as ft
-
 from app.Mailer.sender import EMAIL, EmailManager, EmailSender
-from app.src.components.navigationBar import navigationBar
+from app.src.components.navigationBar import SideBar
 
 # ── Design Tokens ─────────────────────────────────────────────────────────────
 SURFACE = "#050f1c"
@@ -80,8 +80,10 @@ def log_entry(time, level, message, idx=0):
 
 
 def main(page: ft.Page):
-    page.add(ft.Text("Hello wrold from whe"), navigationBar("test", "text"))
-    page.theme = ft.Theme(color_scheme_seed=ft.Colors.AMBER)
+    page.theme = ft.Theme(color_scheme_seed=ft.Colors.BLACK)
+    page.title = "Mailer"
+    page.add(ft.Container(width=200, height=500, content=SideBar()))
+    page.update()
 
 
 ft.app(target=main)
