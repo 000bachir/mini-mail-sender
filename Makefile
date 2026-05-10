@@ -14,7 +14,7 @@ run:
 	PYTHONPATH=. $(PYTHON) -m $(APP_MODULE)
 
 flet:
-	PYTHONPATH=. flet run $(APP_FILE)
+	PYTHONPATH=. flet run --recursive $(APP_FILE)
 
 server:
 	PYTHONPATH=. fastapi dev $(APP_FILE)

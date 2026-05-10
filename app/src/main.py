@@ -1,6 +1,6 @@
 import flet as ft
-from app.src.components.navigationBar import Navbar
-from app.src.components.sidebar import AppDrawer
+from app.src.components.Navbar import Navbar
+from app.src.components.Drawer import AppDrawer
 
 
 def main(page: ft.Page):
@@ -8,15 +8,14 @@ def main(page: ft.Page):
     page.padding = 0
 
     content_area = ft.Container(
-        content=ft.Text("Welcome to Home!", size=24),
+        content=ft.Text("Home page!", size=24),
         padding=40,
         expand=True,
     )
 
     def on_nav_change(route: str):
-        """Shared handler — used by both Navbar and Drawer."""
         pages = {
-            "home": ft.Text("Welcome to Home!", size=24),
+            "Dashborad": ft.Text("Home section", size=24),
             "about": ft.Text("About Us page.", size=24),
             "contact": ft.Text("Contact page.", size=24),
             "settings": ft.Text("Settings page.", size=24),
@@ -26,23 +25,19 @@ def main(page: ft.Page):
         page.update()
 
     def open_drawer(e=None):
-        if page.drawer:
-            page.drawer.open = True
-            page.update()
+        drawer.open = True  # ✅ open drawer
+        page.update()
 
-    # Build components
-    drawer = AppDrawer(page=page, on_nav_change=on_nav_change)
+    drawer = AppDrawer(page, on_nav_change=on_nav_change)
+
+    # ✅ register via overlay, NOT page.drawer
+    page.overlay.append(drawer)
+
     navbar = Navbar(page=page, on_nav_change=on_nav_change, on_drawer_open=open_drawer)
-
-    # Register drawer on the page
-    page.drawer = drawer
 
     page.add(
         ft.Column(
-            controls=[
-                navbar,
-                content_area,
-            ],
+            controls=[navbar, content_area],
             expand=True,
             spacing=0,
         )
