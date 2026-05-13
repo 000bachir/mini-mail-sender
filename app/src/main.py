@@ -1,47 +1,39 @@
-import flet as ft
-from app.src.components.Navbar import Navbar
-from app.src.components.Drawer import AppDrawer
+import sys
+from PySide6 import QtCore, QtWidgets
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QStackedWidget,
+    QLabel,
+    QWidget,
+)
+
+main_window_style = """
+    background-color : #000;
+    color : #fff;
+    font-size : 18px ; 
+
+"""
 
 
-def main(page: ft.Page):
-    page.title = "Hermes"
-    page.padding = 0
-
-    content_area = ft.Container(
-        content=ft.Text("Home page!", size=24),
-        padding=40,
-        expand=True,
-    )
-
-    def on_nav_change(route: str):
-        pages = {
-            "Dashborad": ft.Text("Home section", size=24),
-            "about": ft.Text("About Us page.", size=24),
-            "contact": ft.Text("Contact page.", size=24),
-            "settings": ft.Text("Settings page.", size=24),
-            "logout": ft.Text("Logged out.", size=24),
-        }
-        content_area.content = pages.get(route, ft.Text("Page not found"))
-        page.update()
-
-    def open_drawer(e=None):
-        drawer.open = True  # ✅ open drawer
-        page.update()
-
-    drawer = AppDrawer(page, on_nav_change=on_nav_change)
-
-    # ✅ register via overlay, NOT page.drawer
-    page.overlay.append(drawer)
-
-    navbar = Navbar(page=page, on_nav_change=on_nav_change, on_drawer_open=open_drawer)
-
-    page.add(
-        ft.Column(
-            controls=[navbar, content_area],
-            expand=True,
-            spacing=0,
-        )
-    )
+class MainWindowApp(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Hermes")
+        self.setGeometry(100, 100, 900, 700)
+        self.setBaseSize(700, 700)
 
 
-ft.app(target=main)
+app = QApplication(sys.argv)
+
+window = QWidget()
+window.setStyleSheet(main_window_style)
+window.show()
+
+# start the event loop
+if __name__ == "__main__":
+    app.exec()
