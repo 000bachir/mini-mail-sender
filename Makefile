@@ -1,7 +1,11 @@
 # ========================
 # Variables
 # ========================
-PYTHON=python
+
+VENV=.venv
+PYTHON=$(VENV)/bin/python
+PIP=$(VENV)/bin/pip
+
 PYTEST=pytest
 APP_MODULE=app.src.main
 APP_FILE=app/src/main.py
@@ -13,28 +17,46 @@ APP_FILE=app/src/main.py
 run:
 	PYTHONPATH=. $(PYTHON) -m $(APP_MODULE)
 
+# ========================
+# Hot Reload (Qt-safe)
+# ========================
+# Uses full process restart instead of in-process reload (IMPORTANT for PySide6)
+
+hot:
+	PYTHONPATH=. $(PYTHON) -m watchfiles "$(PYTHON) -m $(APP_MODULE)" app
+
+# ========================
+# Alternative manual run (no reload)
+# ========================
+
+run-file:
+	PYTHONPATH=. $(PYTHON) $(APP_FILE)
+
+# ========================
+# Server (FastAPI)
+# ========================
 
 server:
-	PYTHONPATH=. fastapi dev $(APP_FILE)
+	PYTHONPATH=. $(PYTHON) -m fastapi dev $(APP_FILE)
 
 # ========================
 # Tests
 # ========================
 
 test:
-	PYTHONPATH=. $(PYTEST)
+	PYTHONPATH=. $(PYTHON) -m pytest
 
 test-main:
-	PYTHONPATH=. $(PYTEST) app/src/test_main.py
+	PYTHONPATH=. $(PYTHON) -m pytest app/src/test_main.py
 
 test-mailer:
-	PYTHONPATH=. $(PYTEST) app/Mailer/test_email_sender.py
+	PYTHONPATH=. $(PYTHON) -m pytest app/Mailer/test_email_sender.py
 
 test-supabase:
-	PYTHONPATH=. $(PYTEST) app/supabase/test_supabase_client.py
+	PYTHONPATH=. $(PYTHON) -m pytest app/supabase/test_supabase_client.py
 
 test-scheduler:
-	PYTHONPATH=. $(PYTEST) app/scheduler/test_scheduler.py
+	PYTHONPATH=. $(PYTHON) -m pytest app/scheduler/test_scheduler.py
 
 # ========================
 # Cleanup
@@ -49,10 +71,10 @@ clean:
 # ========================
 
 install:
-	pip install -r requirements.txt
+	$(PIP) install -r requirements.txt
 
 format:
-	black .
+	$(PYTHON) -m black .
 
 lint:
-	ruff .
+	$(PYTHON) -m ruff .
