@@ -14,7 +14,6 @@ from queue import Queue
 from utils.valid_email_check import EmailManager
 from utils.normalize_recipients import normalize_recipients
 
-
 """
 yagmail logic handler
 """
@@ -178,14 +177,13 @@ class EmailSender:
             return False
 
         # validate each address once
-        email_manager = EmailManager()
-        # for r in recipient_list:
-        # if not email_manager.valid_email_pattern(r):
-        #     self.logger.error(f"invalid email address: {r}\n")
-        #     email.status = EmailStatus.FAILED
-        #     email.error_message = f"invalid address: {r}"
-        #     return False
-        #
+        for r in recipient_list:
+            if not EmailManager.valid_email_pattern(r):
+                self.logger.error(f"invalid email address: {r}\n")
+                email.status = EmailStatus.FAILED
+                email.error_message = f"invalid address: {r}"
+                return False
+
         self.logger.info(
             f"starting send to {email.to} — max retries: {email.max_retries}\n"
         )
@@ -193,7 +191,7 @@ class EmailSender:
         while email.retry_count < email.max_retries:
             try:
                 self.yagmail.send(
-                    to=email.to,
+                    to=recipient_list,
                     subject=email.subject,
                     contents=email.body,
                     attachments=email.attachments if email.attachments else None,

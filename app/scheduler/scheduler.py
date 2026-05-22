@@ -1,5 +1,5 @@
-from os import wait
 import time as time_module
+from os import wait
 import random
 import datetime
 from datetime import datetime, timedelta, time
@@ -28,7 +28,7 @@ class EmailScheduler:
         buisness_hours_end: time = time(17, 0),
         daily_batch_emails: int = 100,
         max_email_a_day=70,
-        max_emails_an_hour=30,
+        max_email_an_hour=30,
         enable_loggin: bool = True,
     ):
         variation = random.randint(-10, 25)
@@ -54,7 +54,7 @@ class EmailScheduler:
         self.buisness_hours_ending = buisness_hours_end
 
         # rate limits - single assignement each
-        self.max_email_an_hour = max_emails_an_hour
+        self.max_email_an_hour = max_email_an_hour
         self.max_email_a_day = daily_batch_emails + variation
 
         # tracking metricks
@@ -66,16 +66,16 @@ class EmailScheduler:
         self.current_day_start = datetime.now().replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
+        self.logger = logging.getLogger(__name__)
         if enable_loggin:
-            logging.basicConfig(
-                level=logging.INFO,
-                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            )
-            self.logger = logging.getLogger(__name__)
+            self.logger.setLevel(logging.INFO)
             self.logger.info("Email scheduler class is being initiated\n")
         else:
-            self.logger.disabled = True
+            self.logger.setLevel(logging.CRITICAL + 1)
 
         self.logger.info("Email scheduler initialised successfully\n")
 
@@ -169,7 +169,7 @@ class EmailScheduler:
                     False,
                     f"WARNING max email an hour has been reached {self.max_email_an_hour}\n",
                 )
-            elif self.email_sent_during_an_hour < self.max_email_a_day:
+            elif self.email_sent_during_a_day < self.max_email_a_day:
                 return (
                     True,
                     f"still good to go for the hour the limit is {self.max_email_a_day}\n",

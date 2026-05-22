@@ -1,6 +1,7 @@
 from __future__ import annotations
-import pytest
 import logging
+from unittest import mock
+import pytest
 import random
 from datetime import date, datetime as dt_time
 from datetime import timedelta
@@ -60,9 +61,9 @@ class TestEmailSchedulerInitialization:
         scheduler = EmailScheduler(
             daily_batch_emails=150,
             max_email_an_hour=50,
-            buisness_hours_starting=time(9, 0),
-            buisness_hours_ending=time(17, 0),
-            enable_loggin_info=False,
+            buisness_hours_start=time(9, 0),
+            buisness_hours_end=time(17, 0),
+            enable_loggin=False,
         )
         assert scheduler.buisness_hours_starting == time(9, 0)
         assert scheduler.buisness_hours_ending == time(17, 0)
@@ -77,48 +78,48 @@ class TestEmailSchedulerInitialization:
 
 class TestCheckingBusinessHours:
     def test_weekend_within_buisness_hours(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         test_time = datetime.datetime(2025, 1, 9, 10, 0)
         assert scheduler.checking_buisness_hours(test_time)
 
     def test_weekday_before_business_hours(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         # Monday at 8 AM
         test_time = datetime.datetime(2025, 1, 8, 8, 0)
         assert not scheduler.checking_buisness_hours(test_time)
 
     def test_weekday_after_business_hours(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         # Monday at 6 PM
         test_time = datetime.datetime(2025, 1, 8, 18, 0)
         assert not scheduler.checking_buisness_hours(test_time)
 
     def test_weekend_saturday(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         # Saturday at 10 AM
         test_time = datetime.datetime(2025, 1, 11, 10, 0)
         assert not scheduler.checking_buisness_hours(test_time)
 
     def test_weekend_sunday(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         # Sunday at 10 AM
         test_time = datetime.datetime(2025, 1, 12, 10, 0)
         assert not scheduler.checking_buisness_hours(test_time)
 
     def test_edge_of_business_hours_start(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         # Monday at 9 AM exactly
         test_time = datetime.datetime(2025, 1, 8, 9, 0)
         assert scheduler.checking_buisness_hours(test_time)
 
     def test_edge_of_business_hours_end(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         # Monday at 5 PM exactly
         test_time = datetime.datetime(2025, 1, 8, 17, 0)
         assert scheduler.checking_buisness_hours(test_time)
 
     def test_default_current_time(self):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         # Should use current time if no time provided
         result = scheduler.checking_buisness_hours()
         assert isinstance(result, bool)
@@ -127,7 +128,7 @@ class TestCheckingBusinessHours:
 class TestAddRandomDelayAfterInit:
     @patch("app.scheduler.scheduler.EmailScheduler.get_current_time")
     def test_morning_delay(self, mock_time):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         mock_time.return_value = datetime.datetime(2025, 1, 8, 10, 0)
         delay = scheduler.add_random_delay_after_init()
         assert isinstance(delay, timedelta)
@@ -135,7 +136,7 @@ class TestAddRandomDelayAfterInit:
 
     @patch("app.scheduler.scheduler.EmailScheduler.get_current_time")
     def test_evening_delay(self, mock_time):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         mock_time.return_value = datetime.datetime(2025, 1, 8, 15, 0)  # 3 PM
         delay = scheduler.add_random_delay_after_init()
         assert isinstance(delay, timedelta)
@@ -143,7 +144,7 @@ class TestAddRandomDelayAfterInit:
 
     @patch("app.scheduler.scheduler.EmailScheduler.get_current_time")
     def test_noon_delay(self, mock_time):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         mock_time.return_value = datetime.datetime(2025, 1, 8, 12, 0)  # 12 PM
         delay = scheduler.add_random_delay_after_init()
         assert isinstance(delay, timedelta)
@@ -153,16 +154,17 @@ class TestAddRandomDelayAfterInit:
 class TestRandomEmailIntervalBetweenDelivery:
     @patch("time.sleep")
     def test_default_interval(self, mock_sleep):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         scheduler.random_email_interval_between_delivery()
+        call_count = mock_sleep.call_count
+        assert 15 <= call_count <= 90
 
-        mock_sleep.assert_called_once()
-        call_args = mock_sleep.call_args[0][0]
-        assert 15 <= call_args <= 90
+        for call in mock_sleep.call_args_list:
+            assert call[0][0] == 1
 
     @patch("time.sleep")
     def test_custom_interval(self, mock_sleep):
-        scheduler = EmailScheduler(enable_loggin_info=False)
+        scheduler = EmailScheduler(enable_loggin=False)
         scheduler.random_email_interval_between_delivery(
             max_seconds=120, min_seconds=30
         )
@@ -173,17 +175,17 @@ class TestRandomEmailIntervalBetweenDelivery:
 
 class TestCheckHourlyEmailRateLimit:
     def test_under_hourly_limit(self):
-        scheduler = EmailScheduler(enable_loggin_info=True, max_email_an_hour=30)
+        scheduler = EmailScheduler(enable_loggin=True, max_email_an_hour=30)
         scheduler.email_sent_during_an_hour = 10
         result, message = scheduler.check_hourly_email_rate_limit()
         assert result
         assert "still good to go" in message
 
     def test_over_hourly_limit(self):
-        scheduler = EmailScheduler(max_email_an_hour=30, enable_loggin_info=False)
+        scheduler = EmailScheduler(max_email_an_hour=30, enable_loggin=False)
         scheduler.email_sent_during_an_hour = 35
         result, message = scheduler.check_hourly_email_rate_limit()
-        assert result == False
+        assert not result
         assert "WARNING" in message
 
 
@@ -191,11 +193,12 @@ class TestLogging:
     """Test logging functionality"""
 
     def test_logging_enabled(self):
-        with patch("logging.basicConfig") as mock_config:
-            scheduler = EmailScheduler(enable_loggin_info=True)
+        with patch("app.scheduler.scheduler.logging.basicConfig") as mock_config:
+            scheduler = EmailScheduler(enable_loggin=True)
             mock_config.assert_called_once()
 
     def test_logging_disabled(self):
-        with patch("logging.basicConfig") as mock_config:
-            scheduler = EmailScheduler(enable_loggin_info=False)
+        with patch("app.scheduler.scheduler.logging.basicConfig") as mock_config:
+            scheduler = EmailScheduler(enable_loggin=False)
             mock_config.assert_not_called()
+            assert scheduler.logger.level == logging.CRITICAL + 1

@@ -124,8 +124,8 @@ class TestEmailSenderInit:
 class TestLoadEmailFromDatabase:
     def test_load_email_from_database(self, email_sender):
         mock_emails = ["test1@example.com", "test2@example.com"]
-        with patch("app.Mailer.sender") as mock_db:
-            mock_db.return_value.fetch_all_emails.return_value = mock_emails
+        with patch("app.Mailer.sender.DatabaseOperation") as mock_db_class:
+            mock_db_class.return_value.fetch_all_emails.return_value = mock_emails
             result = email_sender.load_emails_from_database()
             assert result[0] == "test1@example.com"
             assert len(result)
@@ -211,14 +211,14 @@ class TestSendSingleEmail:
 
     def test_send_email_validation_failure(self, email_sender, sample_email):
         """Test email sending with validation failure"""
-        with patch("app.Mailer.sender.EmailManager") as mock_manager:
+        sample_email.to = "bad-email"
+        with patch("app.Mailer.sender") as mock_manager:
             mock_manager.return_value.valid_email_pattern.return_value = False
 
             result = email_sender.send_single_email(sample_email)
-
             assert result is False
             assert sample_email.status == EmailStatus.FAILED
-            assert sample_email.error_message == "validation failed"
+            assert sample_email.error_message == "invalid address: bad-email"
 
     def test_send_email_with_attachments(self, email_sender, sample_email_attachement):
         """Test sending email with attachments"""
