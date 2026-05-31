@@ -33,13 +33,6 @@ run-file:
 	PYTHONPATH=. $(PYTHON) $(APP_FILE)
 
 # ========================
-# Server (FastAPI)
-# ========================
-
-server:
-	PYTHONPATH=. $(PYTHON) -m fastapi dev $(APP_FILE)
-
-# ========================
 # Tests
 # ========================
 

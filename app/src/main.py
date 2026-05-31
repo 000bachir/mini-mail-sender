@@ -1,5 +1,7 @@
+import signal
 import sys
-from PySide6 import QtWidgets
+import time
+from PySide6 import QtCore, QtWidgets
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QVBoxLayout
 
 from app.src.components.Navbar import Navbar
@@ -42,6 +44,12 @@ class MainEntyPoint(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    timer = QtCore.QTimer()
+    timer.start(500)
+    timer.timeout.connect(lambda: None)
+
     window = MainEntyPoint()
 
     window.show()

@@ -6,7 +6,7 @@ class DashBorad(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        label = QLabel("Welcome to DashBorad")
+        label = QLabel("Welcome to DashBorad bro")
         label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet(
             """

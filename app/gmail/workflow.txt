@@ -1,0 +1,27 @@
+the gmail file should only contain the logic that will be responsible for the login , auth , and credentials life cycle 
+
+class GmailClient:
+    def __init__(self):
+        self.creds = None
+        self.service = None
+
+    def sign_in(self):
+        # 1. check token
+        # 2. run OAuth if needed
+        # 3. build service
+        # 4. return user info
+
+    def _run_oauth(self):
+        # InstalledAppFlow.run_local_server()
+
+    def _load_token(self):
+        ...
+
+    def _save_token(self):
+        ...
+
+    def get_service(self):
+        return self.service
+
+    def send_email(self, to, subject, body):
+        ...

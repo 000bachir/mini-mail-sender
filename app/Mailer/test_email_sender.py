@@ -1,8 +1,11 @@
 from re import sub
+from pluggy import Result
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 from queue import Queue
+
+from yagmail.message import email
 from app.Mailer.sender import EMAIL, EmailPriority, EmailSender, EmailStatus
 from configuration.config import loading_env_variables
 
@@ -232,13 +235,12 @@ class TestSendSingleEmail:
 
     def test_send_email_exception(self, email_sender, sample_email):
         """Test email sending with exception"""
-        with patch("app.Mailer.sender.EmailManager") as mock_manager:
-            mock_manager.return_value.valid_email_pattern.return_value = True
+        with patch(
+            "app.Mailer.sender.EmailManager.valid_email_pattern", return_value=True
+        ):
             email_sender.yagmail.send.side_effect = Exception("SMTP Error")
-
-            with pytest.raises(RuntimeError):
-                email_sender.send_single_email(sample_email)
-
+            result = email_sender.send_single_email(sample_email)
+            assert result is False
             assert sample_email.status == EmailStatus.FAILED
             assert "SMTP Error" in sample_email.error_message
 

@@ -8,7 +8,11 @@ class Setting(QtWidgets.QWidget):
         super().__init__(parent)
 
         layout = QVBoxLayout(self)
-        label = QLabel("Settings page")
+        label = QLabel("Settings pages")
         label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("font-size: 28px; font-weight: bold;")
+        label.setStyleSheet("""
+                font-size: 28px; font-weight: bold;
+                color : green ; 
+
+            """)
         layout.addWidget(label)

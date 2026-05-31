@@ -179,7 +179,7 @@ class EmailSender:
         # validate each address once
         for r in recipient_list:
             if not EmailManager.valid_email_pattern(r):
-                self.logger.error(f"invalid email address: {r}\n")
+                self.logger.error(f"invalid email : {r}\n")
                 email.status = EmailStatus.FAILED
                 email.error_message = f"invalid address: {r}"
                 return False

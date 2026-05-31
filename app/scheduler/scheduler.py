@@ -1,7 +1,6 @@
 import time as time_module
 from os import wait
 import random
-import datetime
 from datetime import datetime, timedelta, time
 from typing import Any, Optional, Callable, Union, Tuple
 from enum import Enum
@@ -83,7 +82,7 @@ class EmailScheduler:
         try:
             return datetime.now()
         except Exception as e:
-            self.logger.error(f"the get_current_time crashed : {e}\n")
+            self.logger.error(f"Could not get the current date time: {e}\n")
             raise
 
     def _reset_daily_counter_if_needed(self):
