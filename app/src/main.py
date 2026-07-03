@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QVBoxLa
 from app.src.components.Navbar import Navbar
 from app.src.pages.dashborad import DashBorad
 from app.src.pages.settings import Setting
+from app.src.pages.Contacts_Manager import Email_Managers
 
 
 class MainEntyPoint(QMainWindow):
@@ -16,7 +17,7 @@ class MainEntyPoint(QMainWindow):
         self.setWindowTitle("Hermes")
         self.setGeometry(100, 100, 1000, 800)
         self.setStyleSheet("""
-            background-color : #000;
+            background-color : #181818;
         """)
         self._setup_ui()
 
@@ -29,13 +30,14 @@ class MainEntyPoint(QMainWindow):
         layout.setSpacing(5)
 
         # importing and setting the navbar component :
-        self.navbar = Navbar(["Dashborad", "Settings", "About", "Contact"])
+        self.navbar = Navbar(["Dashborad", "Settings", "Emails"])
         layout.addWidget(self.navbar)
 
         # setting the pages :
         self.pages = QStackedWidget()
         self.pages.addWidget(DashBorad())
         self.pages.addWidget(Setting())
+        self.pages.addWidget(Email_Managers())
 
         layout.addWidget(self.pages)
 
