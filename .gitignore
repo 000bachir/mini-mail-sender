@@ -14,5 +14,6 @@ wheels/
 #env file 
 .env
 
+./app/Local_Database/helper.txt 
 
 Credentials.json
