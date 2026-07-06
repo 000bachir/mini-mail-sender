@@ -51,6 +51,9 @@ test-supabase:
 test-scheduler:
 	PYTHONPATH=. $(PYTHON) -m pytest app/scheduler/test_scheduler.py
 
+test-database : 
+	PYTHONPATH=. $(PYTHON) -m pytest app/LocalDatabase/test_database.py
+
 # ========================
 # Cleanup
 # ========================
