@@ -4,7 +4,7 @@ import logging
 import os
 import sqlite3
 from contextlib import contextmanager
-DATABSE_PATH = os.path.join(os.path.dirname(__file__) , "database.db")
+DATABASE_PATH = os.path.join(os.path.dirname(__file__) , "database.db")
 
 
 class LocalDatabase : 
@@ -20,7 +20,7 @@ class LocalDatabase :
             self.logger.setLevel(logging.CRITICAL + 1)
     @contextmanager
     def get_conn(self)  : 
-        connection = sqlite3.connect(DATABSE_PATH)
+        connection = sqlite3.connect(DATABASE_PATH)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
@@ -75,24 +75,24 @@ class LocalDatabase :
 
 
     def check_database_health(self) :
-        with self.get_conn() as connection :
             try : 
-                connection.execute("SELECT 1")
-                result = connection.execute("PRAGMA integrity_check").fetchone()[0]
-                if result != "ok" : 
-                    raise RuntimeError(result)
-                else : 
-                    return {
-                        "healthy" : True,
-                        "tables" : 3 ,
-                        "wal_mode" : True,
-                        "foreign_keys" : True,
-                        "integrity" : "ok",
-                    }
-
-            except sqlite3.Error as error : 
+                
+                with self.get_conn() as connection :
+                    connection.execute("SELECT 1")
+                    result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+                    if result != "ok" : 
+                        raise RuntimeError(result)
+                    else : 
+                        return {
+                            "healthy" : True,
+                            "tables" : 3 ,
+                            "wal_mode" : True,
+                            "foreign_keys" : True,
+                            "integrity" : "ok",
+                        }
+            except sqlite3.OperationalError as error : 
                 self.logger.error(f"Error the database health has failed : {error}\n")
-                return False
+                raise
     def check_tables_exists(self) : 
         with self.get_conn() as connection : 
             try : 
