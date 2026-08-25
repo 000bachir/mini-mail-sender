@@ -1,0 +1,260 @@
+from re import sub
+from pluggy import Result
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime
+from queue import Queue
+
+from yagmail.message import email
+from app.Mailer.sender import EMAIL, EmailPriority, EmailSender, EmailStatus
+from configuration.config import loading_env_variables
+
+email_personal = loading_env_variables("EMAIL")
+app_password_personal = loading_env_variables("GMAIL_APP_PASSWORD")
+
+
+@pytest.fixture
+def sample_email():
+    return EMAIL(
+        to="test_email@gmail.com",
+        subject="subject of the email",
+        body="this is the body of the email",
+        email_id="test_1",
+    )
+
+
+@pytest.fixture
+def sample_email_attachement(tmp_path):
+    test_file = tmp_path / "test.pdf"
+    test_file.write_bytes(b"%PDF fake content")
+
+    return EMAIL(
+        to="test_email@gmail.com",
+        subject="subject of the email",
+        body="this is the body of the email",
+        email_id="test_1",
+        attachments=[str(test_file)],
+    )
+
+
+@pytest.fixture
+def mock_yagmail():
+    with patch("app.Mailer.sender.yagmail.SMTP") as mock:
+        yield mock
+
+
+@pytest.fixture
+def email_sender(mock_yagmail):
+    with (
+        patch("app.Mailer.sender.email", "test_email@gmail.com"),
+        patch("app.Mailer.sender.app_password", "test_password"),
+    ):
+        sender = EmailSender(enable_loggin=False)
+        return sender
+
+
+class TestEmail:
+    def test_email_creation(self):
+        email = EMAIL(to="test_subject@gmail.com", subject="test", body="body")
+        assert email.to == "test_subject@gmail.com"
+        assert email.subject == "test"
+        assert email.body == "body"
+        assert email.status == EmailStatus.PENDING
+        assert email.priority == EmailPriority.NORMAL
+        assert email.retry_count == 0
+
+    def test_email_to_dict(self):
+        email = EMAIL(to="test_email@gmail.com", subject="test", body="body")
+        email_to_dict = email.to_dict()
+        assert email_to_dict["to"] == "test_email@gmail.com"
+        assert email_to_dict["subject"] == "test"
+        assert email_to_dict["body"] == "body"
+
+    def test_email_from_dict(self):
+        data = {
+            "to": "test@example.com",
+            "subject": "Test",
+            "body": "Body",
+            "priority": "high",
+            "status": "sent",
+            "attachments": None,
+            "cc": None,
+            "bcc": None,
+            "created_at": None,
+            "scheduled_for": None,
+            "sent_at": None,
+            "retry_count": 0,
+            "max_retries": 3,
+            "error_message": None,
+            "email_id": None,
+        }
+        email = EMAIL.from_dict(data)
+        assert email.to == "test@example.com"
+        assert email.priority == EmailPriority.HIGH
+        assert email.status == EmailStatus.SENT
+
+    def test_email_with_multiple_recipient(self):
+        email = EMAIL(
+            to=["first_person@gmail.com", "second_person@gmail.com"],
+            subject="test",
+            body="body",
+        )
+
+        assert isinstance(email.to, list)
+        assert len(email.to) == 2
+
+
+class TestEmailSenderInit:
+    def test_initialization_success(self, mock_yagmail):
+        with (
+            patch("app.Mailer.sender.email", "test_exemple@gmail.com"),
+            patch("app.Mailer.sender.app_password", "test_password"),
+        ):
+            sender = EmailSender(enable_loggin=False)
+            assert sender.email_user == email_personal
+            assert sender.email_app_password == app_password_personal
+
+    def test_initialization_failure(self, mock_yagmail):
+        mock_yagmail.side_effect = Exception("Connection failed\n")
+        with (
+            patch("app.Mailer.sender.email", "test@exemple.com"),
+            patch("app.Mailer.sender.app_password", "test_password"),
+            pytest.raises(Exception),
+        ):
+            EmailSender(enable_loggin=False)
+
+
+class TestLoadEmailFromDatabase:
+    def test_load_email_from_database(self, email_sender):
+        mock_emails = ["test1@example.com", "test2@example.com"]
+        with patch("app.Mailer.sender.DatabaseOperation") as mock_db_class:
+            mock_db_class.return_value.fetch_all_emails.return_value = mock_emails
+            result = email_sender.load_emails_from_database()
+            assert result[0] == "test1@example.com"
+            assert len(result)
+
+    def test_load_email_empty(self, email_sender):
+        with patch("app.Mailer.sender.DatabaseOperation") as mock_db:
+            mock_db.return_value.fetch_all_emails.return_value = []
+            result = email_sender.load_emails_from_database()
+            assert result == []
+
+
+class TestValidateEmailStructure:
+    def test_validate_email_structure(self, email_sender, sample_email: EMAIL):
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
+            mock_normalize.side_effect = lambda x: x
+            result = email_sender.validate_email_structure(sample_email)
+            assert result is True
+
+    def test_validate_invalide_type(self, email_sender):
+        result = email_sender.validate_email_structure("not an a real email")
+        assert result is False
+
+    def test_validate_missing_field(self, email_sender):
+        email = EMAIL(to=None, subject="subject", body="what ever man i hate this life")
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
+            mock_normalize.return_value = None
+            result = email_sender.validate_email_structure(email)
+            assert result is False
+
+    def test_validate_with_valid_attachement(
+        self, email_sender, sample_email_attachement
+    ):
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
+            mock_normalize.side_effect = lambda x: x
+            result = email_sender.validate_email_structure(sample_email_attachement)
+            assert result is True
+
+    def test_validate_with_missing_attachement(self, email_sender):
+        email = EMAIL(
+            to="exemple@gmail.com",
+            subject="subject",
+            body="body",
+            attachments=["/nonexiste/file.pdf"],
+        )
+
+        with patch("app.Mailer.sender.normalize_recipients") as mock_normalize:
+            mock_normalize.side_effect = lambda x: x
+            result = email_sender.validate_email_structure(email)
+            assert result is False
+
+
+class TestSavingEmailsInQueue:
+    def test_save_emails_to_queue(self, email_sender):
+        """Test saving emails to queue"""
+        emails = ["email1", "email2", "email3"]
+        queue = email_sender.saving_emails_in_queue(emails)
+
+        assert isinstance(queue, Queue)
+        assert queue.qsize() == 3
+
+    def test_save_empty_list_to_queue(self, email_sender):
+        """Test saving empty list to queue"""
+        emails = []
+        queue = email_sender.saving_emails_in_queue(emails)
+
+        assert isinstance(queue, Queue)
+        assert queue.qsize() == 0
+
+
+# Test send_single_email
+class TestSendSingleEmail:
+    def test_send_email_success(self, email_sender, sample_email):
+        """Test successful email sending"""
+        with patch("app.Mailer.sender.EmailManager") as mock_manager:
+            mock_manager.return_value.valid_email_pattern.return_value = True
+
+            result = email_sender.send_single_email(sample_email)
+
+            assert result is True
+            assert sample_email.status == EmailStatus.SUCCESS
+            assert sample_email.priority == EmailPriority.NORMAL
+            assert sample_email.sent_at is not None
+
+    def test_send_email_validation_failure(self, email_sender, sample_email):
+        """Test email sending with validation failure"""
+        sample_email.to = "bad-email"
+        with patch("app.Mailer.sender") as mock_manager:
+            mock_manager.return_value.valid_email_pattern.return_value = False
+
+            result = email_sender.send_single_email(sample_email)
+            assert result is False
+            assert sample_email.status == EmailStatus.FAILED
+            assert sample_email.error_message == "invalid address: bad-email"
+
+    def test_send_email_with_attachments(self, email_sender, sample_email_attachement):
+        """Test sending email with attachments"""
+        with patch("app.Mailer.sender.EmailManager") as mock_manager:
+            mock_manager.return_value.valid_email_pattern.return_value = True
+
+            result = email_sender.send_single_email(sample_email_attachement)
+
+            assert result is True
+            email_sender.yagmail.send.assert_called_once()
+
+    def test_send_email_exception(self, email_sender, sample_email):
+        """Test email sending with exception"""
+        with patch(
+            "app.Mailer.sender.EmailManager.valid_email_pattern", return_value=True
+        ):
+            email_sender.yagmail.send.side_effect = Exception("SMTP Error")
+            result = email_sender.send_single_email(sample_email)
+            assert result is False
+            assert sample_email.status == EmailStatus.FAILED
+            assert "SMTP Error" in sample_email.error_message
+
+
+# Test Enums
+class TestEnums:
+    def test_email_status_values(self):
+        """Test EmailStatus enum values"""
+        assert EmailStatus.PENDING.value == "pending"
+        assert EmailStatus.SENT.value == "sent"
+        assert EmailStatus.FAILED.value == "failed"
+
+    def test_email_priority_values(self):
+        """Test EmailPriority enum values"""
+        assert EmailPriority.LOW.value == "low"
+        assert EmailPriority.NORMAL.value == "normal"
+        assert EmailPriority.HIGH.value == "high"

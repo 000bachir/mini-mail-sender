@@ -1,0 +1,17 @@
+add_email()
+
+delete_email()
+
+update_email()
+
+get_email()
+
+get_all_emails()
+
+schedule_email()
+
+mark_sent()
+
+get_pending_emails()
+
+log_sent_email()

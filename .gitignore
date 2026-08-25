@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+#env file 
+.env
+#Important files 
+./app/Local_Database/helper.txt 
+# Credentials
+app/Credentials/
+app/Credentials.json
