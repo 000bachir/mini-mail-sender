@@ -54,6 +54,15 @@ test-scheduler:
 test-database : 
 	PYTHONPATH=. $(PYTHON) -m pytest app/LocalDatabase/test_database.py
 
+test_google_sheet : 
+	PYTHONPATH=. $(PYTHON) -m pytest app/GoogleConnection/test_google_sheet.py
+
+
+
+
+
+
+
 # ========================
 # Cleanup
 # ========================
