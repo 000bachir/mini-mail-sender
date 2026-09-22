@@ -82,8 +82,25 @@ def test_worksheet_returns_worksheets(conn ) :
 
     result = conn.get_worksheet("test_contacts" , worksheet_index=0)
     mock_spreadsheet.get_worksheet.assert_called_once_with(0)
-    assert result is mock_spreadsheet
+    assert result is mock_worksheet
 
+
+def test_get_worksheet_raises_indexerror_when_index_missing(conn) : 
+    mock_spreadsheet = MagicMock()
+    mock_spreadsheet.get_worksheet.return_value = None
+    mock_client =MagicMock()
+    mock_client.open.return_value = mock_spreadsheet 
+    conn._client = mock_client
+
+    with pytest.raises(IndexError) : 
+        conn.get_worksheet("test_contacts" , worksheet_index = 5)
+
+def  test_get_worksheet_propagates_real_exceptions_unmodified(conn) : 
+    mock_client =MagicMock()
+    mock_client.open.side_effect = ValueError("Some underlying gspread error")
+    conn._client = mock_client 
+    with pytest.raises(ValueError , match="Some underlying gspread error"): 
+        conn.get_worksheet("test_contacts")
 
 
 
